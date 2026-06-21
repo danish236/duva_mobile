@@ -113,23 +113,21 @@ app.get('/pool', async (c) => {
   }
 });
 
-// --- 3. THE SWIPE ROUTE ---
+// --- 3. THE SWIPE ROUTE (Updated with Notifications) ---
 app.post('/swipe', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { swiped_id, action } = await c.req.json(); // action is 'like' or 'pass'
+    const { swiped_id, action } = await c.req.json();
 
-    // Insert the swipe
     await supabase.from('swipes').insert({
       swiper_id: user.id,
       swiped_id: swiped_id,
       action: action
     });
 
-    // If it's a 'like', check for a mutual match
     let isMatch = false;
     if (action === 'like') {
       const { data: mutualSwipe } = await supabase
@@ -140,11 +138,27 @@ app.post('/swipe', async (c) => {
         .eq('action', 'like')
         .single();
         
-      if (mutualSwipe) isMatch = true;
+      if (mutualSwipe) {
+        isMatch = true;
+        // Generate Match Notifications for BOTH users
+        await supabase.from('notifications').insert([
+          { user_id: swiped_id, type: 'match', title: '✨ Zenith Alignment!', message: 'Someone you liked liked you back.' },
+          { user_id: user.id, type: 'match', title: '✨ Zenith Alignment!', message: 'You matched with a new profile.' }
+        ]);
+      } else {
+        // Generate a "Blind Like" Notification for the receiver
+        await supabase.from('notifications').insert({
+           user_id: swiped_id, 
+           type: 'like', 
+           title: 'Someone likes you!', 
+           message: 'Keep swiping in the pool to find out who.' 
+        });
+      }
     }
 
     return c.json({ success: true, isMatch });
   } catch (e) {
+    console.error(e);
     return c.json({ error: 'Swipe failed' }, 500);
   }
 });
@@ -197,6 +211,27 @@ app.post('/messages/:match_id', async (c) => {
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Failed to send message' }, 500);
+  }
+});
+
+// --- 6. FETCH NOTIFICATIONS ---
+app.get('/notifications', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    return c.json(notifications || []);
+  } catch (e) {
+    return c.json({ error: 'Failed to fetch notifications' }, 500);
   }
 });
 

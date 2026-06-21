@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart'; // This is the crucial import to make onTap work
+import 'notifications_screen.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -57,6 +58,15 @@ class _MatchesScreenState extends State<MatchesScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none, color: Colors.black),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+              );
+            },
+          ),
           IconButton(icon: const Icon(Icons.shield, color: Colors.grey), onPressed: () {}), // Safety toolkit icon
         ],
       ),
