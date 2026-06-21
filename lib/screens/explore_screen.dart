@@ -197,6 +197,31 @@ class _ExploreScreenState extends State<ExploreScreen> {
                               Text(profile.location, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                             ],
                           ),
+                          
+                          // --- NEW SHARED INTERESTS BADGE ---
+                          if (profile.sharedInterestsCount > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12.0),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min, // Keeps the box wrapped tight around text
+                                  children: [
+                                    const Icon(Icons.stars, size: 16, color: Colors.purple),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '${profile.sharedInterestsCount} Shared Interests',
+                                      style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

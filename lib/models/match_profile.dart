@@ -1,5 +1,3 @@
-/// Represents a potential match in the Explore feed.
-/// Immutable data class adhering to clean architecture principles.
 class MatchProfile {
   final String id;
   final String firstName;
@@ -7,8 +5,11 @@ class MatchProfile {
   final String location;
   final String? bio;
   final String? expectations;
+  final String? work;
+  final String? education;
   final List<String> interests;
   final List<String> images;
+  final int sharedInterestsCount; // New Field
 
   const MatchProfile({
     required this.id,
@@ -17,18 +18,26 @@ class MatchProfile {
     required this.location,
     this.bio,
     this.expectations,
+    this.work,
+    this.education,
     required this.interests,
     required this.images,
+    this.sharedInterestsCount = 0,
   });
 
   factory MatchProfile.fromJson(Map<String, dynamic> json) {
-  return MatchProfile(
-    id: json['id'],
-    firstName: json['first_name'],
-    age: json['age'],
-    location: json['location'],
-    interests: List<String>.from(json['interests']),
-    images: List<String>.from(json['images']),
-  );
-}
+    return MatchProfile(
+      id: json['id'] ?? '',
+      firstName: json['firstName'] ?? 'Unknown',
+      age: json['age'] ?? 18,
+      location: json['location'] ?? 'Unknown Location',
+      bio: json['bio'],
+      expectations: json['expectations'],
+      work: json['work'],
+      education: json['education'],
+      interests: json['interests'] != null ? List<String>.from(json['interests']) : [],
+      images: json['images'] != null ? List<String>.from(json['images']) : [],
+      sharedInterestsCount: json['sharedInterestsCount'] ?? 0,
+    );
+  }
 }

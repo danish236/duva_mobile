@@ -46,21 +46,69 @@ app.post('/upload', async (c) => {
   }
 });
 
-// --- 2. THE SMART POOL ROUTE ---
+// --- 2. THE SMART POOL ROUTE (BASIC MATCHING) ---
 app.get('/pool', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // Call Supabase: Get profiles where ID is not me, and not in my swipes table
-    const { data, error } = await supabase.rpc('get_unswiped_profiles', { 
-      my_id: user.id 
+    // 1. Get IDs of people I've already swiped on so I don't see them again
+    const { data: swipes } = await supabase.from('swipes').select('swiped_id').eq('swiper_id', user.id);
+    const swipedIds = (swipes || []).map(s => s.swiped_id);
+    swipedIds.push(user.id); // Add my own ID so I don't swipe on myself
+
+    // 2. Get MY specific interests
+    const { data: myInterestsData } = await supabase.from('profile_interests').select('interest_id').eq('profile_id', user.id);
+    const myInterests = (myInterestsData || []).map(i => i.interest_id);
+
+    // 3. Fetch the unswiped pool WITH their joined interests
+    let poolQuery = supabase.from('profiles').select(`
+      *,
+      profile_interests ( interest_id, master_interests ( name ) )
+    `);
+    
+    // Safely exclude people we've swiped on
+    if (swipedIds.length > 0) {
+      poolQuery = poolQuery.not('id', 'in', `(${swipedIds.join(',')})`);
+    }
+
+    const { data: rawPool, error } = await poolQuery.limit(20);
+    if (error) throw error;
+
+    // 4. ALGORITHM: Calculate Shared Interests & Format Data
+    const scoredPool = (rawPool || []).map(profile => {
+      const theirInterests = profile.profile_interests || [];
+      const theirInterestIds = theirInterests.map((pi: any) => pi.interest_id);
+      const theirInterestNames = theirInterests.map((pi: any) => pi.master_interests?.name).filter(Boolean);
+      
+      // Count how many overlapping IDs exist
+      const sharedCount = theirInterestIds.filter((id: number) => myInterests.includes(id)).length;
+      
+      // Calculate Age from DOB
+      const age = profile.dob ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / 31557600000) : 18;
+
+      return {
+        id: profile.id,
+        firstName: profile.first_name, // Map to camelCase for Flutter
+        age: age,
+        location: profile.location,
+        bio: profile.bio,
+        work: profile.work,
+        education: profile.education,
+        expectations: profile.expectations,
+        images: profile.images || [],
+        interests: theirInterestNames,
+        sharedInterestsCount: sharedCount // Send the score to the frontend!
+      };
     });
 
-    if (error) throw error;
-    return c.json(data);
+    // 5. Sort the pool so people with the MOST shared interests appear first
+    scoredPool.sort((a, b) => b.sharedInterestsCount - a.sharedInterestsCount);
+
+    return c.json(scoredPool);
   } catch (e) {
+    console.error(e);
     return c.json({ error: 'Failed to fetch pool' }, 500);
   }
 });
@@ -98,6 +146,57 @@ app.post('/swipe', async (c) => {
     return c.json({ success: true, isMatch });
   } catch (e) {
     return c.json({ error: 'Swipe failed' }, 500);
+  }
+});
+
+// --- 5. STATELESS CHAT POLLING (Saves WebSocket Limits) ---
+
+// GET: Fetch conversation history
+app.get('/messages/:match_id', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const matchId = c.req.param('match_id');
+
+    // Fetch messages where I am sender & they are receiver, OR they are sender & I am receiver
+    const { data: messages, error } = await supabase
+      .from('messages')
+      .select('id, sender_id, content, created_at')
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${matchId}),and(sender_id.eq.${matchId},receiver_id.eq.${user.id})`)
+      .order('created_at', { ascending: true }) // Oldest first (for chat UI)
+      .limit(100); 
+
+    if (error) throw error;
+    return c.json(messages || []);
+  } catch (e) {
+    return c.json({ error: 'Failed to fetch messages' }, 500);
+  }
+});
+
+// POST: Send a new message
+app.post('/messages/:match_id', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const matchId = c.req.param('match_id');
+    const { content } = await c.req.json();
+
+    if (!content || content.trim() === '') return c.json({ error: 'Empty message' }, 400);
+
+    const { error } = await supabase.from('messages').insert({
+      sender_id: user.id,
+      receiver_id: matchId,
+      content: content.trim()
+    });
+
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: 'Failed to send message' }, 500);
   }
 });
 
