@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ---------------------------------------------------------
-// 1. DATA MODEL (Matches your Supabase Schema exactly)
+// 1. DATA MODEL
 // ---------------------------------------------------------
 class ProfileData {
+  final String id;
   final String firstName;
   final String lastName;
   final String location;
@@ -11,11 +13,12 @@ class ProfileData {
   final DateTime dob;
   final String? work;
   final String? education;
-  final List<String> images; // From Cloudflare
+  final List<String> images; 
   final String? expectations;
-  final List<String> interests; // Joined from master_interests
+  final List<String> interests; 
 
   ProfileData({
+    required this.id,
     required this.firstName,
     required this.lastName,
     required this.location,
@@ -28,7 +31,6 @@ class ProfileData {
     required this.interests,
   });
 
-  // Helper to calculate age from DOB
   int get age {
     final today = DateTime.now();
     int age = today.year - dob.year;
@@ -36,6 +38,33 @@ class ProfileData {
       age--;
     }
     return age;
+  }
+
+  // Factory to safely parse Supabase JSON, including nested joins
+  factory ProfileData.fromJson(Map<String, dynamic> json) {
+    // Extract interests from the nested join table structure
+    List<String> parsedInterests = [];
+    if (json['profile_interests'] != null) {
+      for (var item in (json['profile_interests'] as List)) {
+        if (item['master_interests'] != null && item['master_interests']['name'] != null) {
+          parsedInterests.add(item['master_interests']['name'] as String);
+        }
+      }
+    }
+
+    return ProfileData(
+      id: json['id'] ?? '',
+      firstName: json['first_name'] ?? 'Unknown',
+      lastName: json['last_name'] ?? '',
+      location: json['location'] ?? 'Location not set',
+      bio: json['bio'],
+      dob: json['dob'] != null ? DateTime.parse(json['dob']) : DateTime.now(),
+      work: json['work'],
+      education: json['education'],
+      images: json['images'] != null ? List<String>.from(json['images']) : [],
+      expectations: json['expectations'],
+      interests: parsedInterests,
+    );
   }
 }
 
@@ -50,28 +79,91 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // Mock data representing what Hono will return from Supabase
-  final ProfileData myProfile = ProfileData(
-    firstName: 'Alex',
-    lastName: 'Rivera',
-    location: 'New York, NY',
-    dob: DateTime(1996, 8, 14),
-    bio: 'Just looking for someone to grab coffee with and explore the city.',
-    work: 'Software Engineer at TechCorp',
-    education: 'Columbia University',
-    expectations: 'Long-term relationship, but let us start as friends.',
-    interests: ['Coffee', 'Bouldering', 'Live Music', 'Photography'],
-    images: [
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=800&auto=format&fit=crop', // Photo 1
-      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop', // Photo 2
-      'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=80&w=800&auto=format&fit=crop', // Photo 3
-    ],
-  );
+  ProfileData? _myProfile;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMyProfile();
+  }
+
+  Future<void> _fetchMyProfile() async {
+    try {
+      // 1. Get the securely logged-in user's ID
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      
+      if (userId == null) {
+        throw Exception('User is not logged in.');
+      }
+
+      // 2. Fetch profile data and explicitly join the interests tables
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('''
+            *,
+            profile_interests (
+              master_interests (
+                name
+              )
+            )
+          ''')
+          .eq('id', userId)
+          .single();
+
+      // 3. Parse and update state
+      setState(() {
+        _myProfile = ProfileData.fromJson(data);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Could not load profile. Have you completed onboarding?";
+        _isLoading = false;
+      });
+      debugPrint('Profile Fetch Error: $e');
+    }
+  }
+
+  Future<void> _signOut() async {
+    await Supabase.instance.client.auth.signOut();
+    // The StreamBuilder in main.dart will automatically handle navigation!
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Show loading spinner while fetching data
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Show error if data is missing (e.g., user signed up but didn't create a profile yet)
+    if (_errorMessage != null || _myProfile == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('My Profile')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(_errorMessage ?? 'Profile not found.', style: const TextStyle(fontSize: 16)),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _signOut,
+                child: const Text('Sign Out'),
+              )
+            ],
+          ),
+        ),
+      );
+    }
+
+    final profile = _myProfile!;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100], // Slightly off-white background for contrast
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
@@ -80,7 +172,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.black),
             onPressed: () {
-              // TODO: Navigate to settings to edit profile
+              // Quick sign out menu for testing
+              showModalBottomSheet(
+                context: context,
+                builder: (context) => SafeArea(
+                  child: ListTile(
+                    leading: const Icon(Icons.logout, color: Colors.red),
+                    title: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _signOut();
+                    },
+                  ),
+                ),
+              );
             },
           ),
         ],
@@ -89,17 +194,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // --- PHOTO 1 ---
-            if (myProfile.images.isNotEmpty)
-              _buildFullWidthImage(myProfile.images[0]),
+            if (profile.images.isNotEmpty)
+              _buildFullWidthImage(profile.images[0]),
 
-            // --- BASIC INFO CARD ---
             _buildInfoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${myProfile.firstName}, ${myProfile.age}',
+                    '${profile.firstName}, ${profile.age}',
                     style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
@@ -107,78 +210,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       const Icon(Icons.location_on, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text(myProfile.location, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                      Text(profile.location, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (myProfile.work != null)
+                  if (profile.work != null && profile.work!.isNotEmpty)
                     Row(
                       children: [
                         const Icon(Icons.work, size: 16, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Text(myProfile.work!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                        Text(profile.work!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                       ],
                     ),
                   const SizedBox(height: 8),
-                  if (myProfile.education != null)
+                  if (profile.education != null && profile.education!.isNotEmpty)
                     Row(
                       children: [
                         const Icon(Icons.school, size: 16, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Text(myProfile.education!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                        Text(profile.education!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
                       ],
                     ),
                 ],
               ),
             ),
 
-            // --- BIO PROMPT ---
-            if (myProfile.bio != null)
-              _buildPromptCard('A bit about me...', myProfile.bio!),
+            if (profile.bio != null && profile.bio!.isNotEmpty)
+              _buildPromptCard('A bit about me...', profile.bio!),
 
-            // --- PHOTO 2 ---
-            if (myProfile.images.length > 1)
-              _buildFullWidthImage(myProfile.images[1]),
+            if (profile.images.length > 1)
+              _buildFullWidthImage(profile.images[1]),
 
-            // --- EXPECTATIONS PROMPT ---
-            if (myProfile.expectations != null)
-              _buildPromptCard('What I am looking for', myProfile.expectations!),
+            if (profile.expectations != null && profile.expectations!.isNotEmpty)
+              _buildPromptCard('What I am looking for', profile.expectations!),
 
-            // --- INTERESTS WRAP ---
-            _buildInfoCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Interests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8.0, // Gap between chips horizontally
-                    runSpacing: 8.0, // Gap between chips vertically
-                    children: myProfile.interests.map((interest) {
-                      return Chip(
-                        label: Text(interest),
-                        backgroundColor: Colors.white,
-                        side: BorderSide(color: Colors.grey[300]!),
-                        labelStyle: const TextStyle(fontWeight: FontWeight.w500),
-                      );
-                    }).toList(),
-                  ),
-                ],
+            if (profile.interests.isNotEmpty)
+              _buildInfoCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Interests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8.0, 
+                      runSpacing: 8.0, 
+                      children: profile.interests.map((interest) {
+                        return Chip(
+                          label: Text(interest),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(color: Colors.grey[300]!),
+                          labelStyle: const TextStyle(fontWeight: FontWeight.w500),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            // --- PHOTO 3 ---
-            if (myProfile.images.length > 2)
-              _buildFullWidthImage(myProfile.images[2]),
+            if (profile.images.length > 2)
+              _buildFullWidthImage(profile.images[2]),
               
-            const SizedBox(height: 40), // Bottom padding
+            const SizedBox(height: 40), 
           ],
         ),
       ),
     );
   }
 
-  // Helper method to draw the images beautifully
   Widget _buildFullWidthImage(String imageUrl) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
@@ -204,11 +302,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Center(child: CircularProgressIndicator()),
           );
         },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 400,
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)),
+          );
+        },
       ),
     );
   }
 
-  // Helper method for standard info cards
   Widget _buildInfoCard({required Widget child}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -228,7 +332,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Helper method for text prompts (Hinge style)
   Widget _buildPromptCard(String promptTitle, String promptAnswer) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
