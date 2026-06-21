@@ -3,6 +3,7 @@ class MatchProfile {
   final String firstName;
   final int age;
   final String location;
+  final int distance;
   final String? bio;
   final String? expectations;
   final String? work;
@@ -16,6 +17,7 @@ class MatchProfile {
     required this.firstName,
     required this.age,
     required this.location,
+    this.distance = 0,
     this.bio,
     this.expectations,
     this.work,
@@ -31,6 +33,7 @@ class MatchProfile {
       firstName: json['firstName'] ?? 'Unknown',
       age: json['age'] ?? 18,
       location: json['location'] ?? 'Unknown Location',
+      distance: json['distance'] ?? 0,
       bio: json['bio'],
       expectations: json['expectations'],
       work: json['work'],
