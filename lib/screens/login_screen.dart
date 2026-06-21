@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'register_screen.dart';
+import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,8 +32,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      // Background color is now handled by the global theme!
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -40,49 +43,43 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.favorite_rounded, size: 64, color: Colors.blueAccent),
+              const Icon(Icons.favorite_rounded, size: 64, color: AppTheme.hotPink),
               const SizedBox(height: 24),
-              const Text('Welcome to Duva', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 40), // Tighter spacing
+              Text('Welcome to Duva', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+              const SizedBox(height: 40), 
+              
               TextField(
                 controller: _emailController, 
-                keyboardType: TextInputType.emailAddress, // Better keyboard
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                )
+                keyboardType: TextInputType.emailAddress, 
+                decoration: const InputDecoration(labelText: 'Email') // Styling is handled by theme.dart
               ),
               const SizedBox(height: 16),
+              
               TextField(
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   suffixIcon: IconButton(
-                    icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.grey),
+                    icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: colorScheme.onSurface.withValues(alpha: 0.6)),
                     onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                   ),
                 ),
               ),
               const SizedBox(height: 32),
+              
               SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                   onPressed: _isLoading ? null : _signIn,
-                  child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Login', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Login'),
                 ),
               ),
               const SizedBox(height: 16),
-              // FIX: A proper interactive TextButton
+              
               TextButton(
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                child: const Text('Don\'t have an account? Register', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.w600)),
+                child: const Text('Don\'t have an account? Register', style: TextStyle(color: AppTheme.skySurge, fontWeight: FontWeight.w600)),
               ),
             ],
           ),

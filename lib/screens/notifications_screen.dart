@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../theme.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -24,72 +25,51 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _fetchNotifications() async {
     try {
       final session = Supabase.instance.client.auth.currentSession;
-      final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
-
-      final response = await dio.get('$apiUrl/notifications', options: options);
-      
-      if (mounted) {
-        setState(() {
-          _notifications = response.data;
-          _isLoading = false;
-        });
-      }
+      final response = await dio.get('$apiUrl/notifications', options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}));
+      if (mounted) setState(() { _notifications = response.data; _isLoading = false; });
     } catch (e) {
-      debugPrint("Notifications fetch error: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Icon _getIconForType(String type) {
+  Icon _getIconForType(String type, ColorScheme colorScheme) {
     switch (type) {
-      case 'like':
-        return const Icon(Icons.favorite, color: Colors.redAccent);
-      case 'match':
-        return const Icon(Icons.auto_awesome, color: Colors.purple);
-      case 'system':
-      default:
-        return const Icon(Icons.info, color: Colors.blueAccent);
+      case 'like': return const Icon(Icons.favorite, color: AppTheme.hotPink);
+      case 'match': return const Icon(Icons.auto_awesome, color: AppTheme.skySurge);
+      default: return Icon(Icons.info, color: colorScheme.primary);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
+        title: Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+        backgroundColor: colorScheme.surface,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: colorScheme.primary))
           : _notifications.isEmpty
-              ? _buildEmptyState()
+              ? _buildEmptyState(colorScheme)
               : ListView.separated(
                   itemCount: _notifications.length,
-                  separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey[200]),
+                  separatorBuilder: (context, index) => Divider(height: 1, color: colorScheme.onSurface.withValues(alpha: 0.1)),
                   itemBuilder: (context, index) {
                     final note = _notifications[index];
                     final bool isRead = note['is_read'] ?? false;
 
                     return Container(
-                      color: isRead ? Colors.white : Colors.blue.withValues(alpha: 0.05),
+                      color: isRead ? colorScheme.surface : colorScheme.primary.withValues(alpha: 0.05),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         leading: CircleAvatar(
-                          backgroundColor: Colors.grey[100],
-                          radius: 24,
-                          child: _getIconForType(note['type']),
+                          backgroundColor: colorScheme.background,
+                          child: _getIconForType(note['type'], colorScheme),
                         ),
-                        title: Text(
-                          note['title'], 
-                          style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold, fontSize: 16)
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(note['message'], style: const TextStyle(color: Colors.black87)),
-                        ),
+                        title: Text(note['title'], style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
+                        subtitle: Text(note['message'], style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7))),
                       ),
                     );
                   },
@@ -97,16 +77,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(ColorScheme colorScheme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey[300]),
+          Icon(Icons.notifications_off_outlined, size: 80, color: colorScheme.onSurface.withValues(alpha: 0.2)),
           const SizedBox(height: 16),
-          const Text('All Caught Up', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text('All Caught Up', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
           const SizedBox(height: 8),
-          const Text('You have no new notifications right now.', style: TextStyle(color: Colors.grey)),
+          Text('You have no new notifications right now.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
         ],
       ),
     );

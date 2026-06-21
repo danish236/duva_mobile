@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dio/dio.dart';
+import '../main.dart'; // Required to access the themeNotifier
+import '../theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    final colorScheme = Theme.of(context).colorScheme;
     // 1. Show Warning Dialog
     final confirm = await showDialog<bool>(
       context: context,
@@ -43,11 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final session = Supabase.instance.client.auth.currentSession;
       final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
-      
-      // Hit the Cloudflare Edge API to wipe data
       await dio.delete('$apiUrl/account', options: options);
-      
-      // Sign out to clear local session
       await Supabase.instance.client.auth.signOut();
       
       if (!mounted) return;
@@ -62,52 +61,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        title: Text('Settings', style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold)),
+        backgroundColor: colorScheme.surface,
         elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: IconThemeData(color: colorScheme.onSurface),
       ),
       body: _isProcessing 
         ? const Center(child: CircularProgressIndicator(color: Colors.red))
         : ListView(
             padding: const EdgeInsets.symmetric(vertical: 20),
             children: [
-              _buildSectionHeader('Account'),
-              _buildListTile(Icons.email_outlined, 'Email Address', trailing: Supabase.instance.client.auth.currentUser?.email ?? 'Unknown'),
-              _buildListTile(Icons.security, 'Privacy & Security', onTap: () {}),
+              _buildSectionHeader('Appearance', colorScheme),
+              SwitchListTile(
+                secondary: Icon(Icons.dark_mode_outlined, color: colorScheme.onSurface),
+                title: Text('Dark Mode', style: TextStyle(color: colorScheme.onSurface)),
+                value: themeNotifier.value == ThemeMode.dark,
+                onChanged: (value) {
+                  setState(() {
+                    themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+                  });
+                },
+              ),
               
               const SizedBox(height: 24),
-              _buildSectionHeader('Data'),
-              _buildListTile(Icons.download_outlined, 'Request Data Export', onTap: () {
+              _buildSectionHeader('Account', colorScheme),
+              _buildListTile(Icons.email_outlined, 'Email Address', colorScheme, trailing: Supabase.instance.client.auth.currentUser?.email ?? 'Unknown'),
+              _buildListTile(Icons.security, 'Privacy & Security', colorScheme, onTap: () {}),
+              
+              const SizedBox(height: 24),
+              _buildSectionHeader('Data', colorScheme),
+              _buildListTile(Icons.download_outlined, 'Request Data Export', colorScheme, onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data export request sent to your email.')));
               }),
               
               const SizedBox(height: 24),
-              _buildSectionHeader('Actions'),
-              _buildListTile(Icons.logout, 'Sign Out', textColor: Colors.black87, onTap: _signOut),
-              _buildListTile(Icons.delete_forever, 'Delete Account', textColor: Colors.red, onTap: _deleteAccount),
+              _buildSectionHeader('Actions', colorScheme),
+              _buildListTile(Icons.logout, 'Sign Out', colorScheme, textColor: colorScheme.onSurface, onTap: _signOut),
+              _buildListTile(Icons.delete_forever, 'Delete Account', colorScheme, textColor: Colors.red, onTap: _deleteAccount),
             ],
           ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.only(left: 20, bottom: 8),
-      child: Text(title.toUpperCase(), style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      child: Text(title.toUpperCase(), style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
     );
   }
 
-  Widget _buildListTile(IconData icon, String title, {String? trailing, Color textColor = Colors.black87, VoidCallback? onTap}) {
+  Widget _buildListTile(IconData icon, String title, ColorScheme colorScheme, {String? trailing, Color? textColor, VoidCallback? onTap}) {
     return Container(
-      color: Colors.white,
+      color: colorScheme.surface,
       child: ListTile(
-        leading: Icon(icon, color: textColor),
-        title: Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.w500)),
-        trailing: trailing != null ? Text(trailing, style: const TextStyle(color: Colors.grey, fontSize: 14)) : const Icon(Icons.chevron_right, color: Colors.grey),
+        leading: Icon(icon, color: textColor ?? colorScheme.onSurface),
+        title: Text(title, style: TextStyle(color: textColor ?? colorScheme.onSurface, fontWeight: FontWeight.w500)),
+        trailing: trailing != null 
+          ? Text(trailing, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 14)) 
+          : Icon(Icons.chevron_right, color: colorScheme.onSurface.withValues(alpha: 0.6)),
         onTap: onTap,
       ),
     );

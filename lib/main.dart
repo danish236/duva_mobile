@@ -5,6 +5,8 @@ import 'screens/matches_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/login_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:duva_mobile/theme.dart';
+import 'theme_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,12 +29,13 @@ class DuvaMobileApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Duva Mobile',
+      title: 'Duva',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      // --- THEME APPLIED CORRECTLY HERE ---
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system, 
+      // -------------------------
       home: StreamBuilder<AuthState>(
         stream: Supabase.instance.client.auth.onAuthStateChange,
         builder: (context, snapshot) {
@@ -46,7 +49,6 @@ class DuvaMobileApp extends StatelessWidget {
   }
 }
 
-// Ensure this class remains defined here or imported correctly
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
 
@@ -68,16 +70,19 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Scaffold(
       body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: colorScheme.surface,
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Pool'),
           BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Matches'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.black,
+        selectedItemColor: AppTheme.hotPink, // Neon pink for active tab!
         unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
       ),

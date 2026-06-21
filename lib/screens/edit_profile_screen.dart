@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'profile_screen.dart'; // To access the ProfileData class
+import 'profile_screen.dart';
+import '../theme.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final ProfileData currentProfile;
@@ -14,36 +15,62 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  bool _isLoadingData = true;
 
-  late TextEditingController _bioController;
-  late TextEditingController _workController;
-  late TextEditingController _eduController;
-  late TextEditingController _expectationsController;
-  late TextEditingController _locationController;
-  
-  // --- NEW: Date Bid Controller ---
-  late TextEditingController _dateBidController;
+  final _bioController = TextEditingController();
+  final _workController = TextEditingController();
+  final _locationController = TextEditingController();
+  final _dateBidController = TextEditingController();
+
+  // Selections
+  String? _selectedGender;
+  String? _selectedExpectation;
+  String? _selectedEducation;
+
+  // Master Data
+  List<String> _masterGenders = [];
+  List<String> _masterExpectations = [];
+  List<String> _masterEducation = [];
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill the text fields with the user's existing data
-    _bioController = TextEditingController(text: widget.currentProfile.bio);
-    _workController = TextEditingController(text: widget.currentProfile.work);
-    _eduController = TextEditingController(text: widget.currentProfile.education);
-    _expectationsController = TextEditingController(text: widget.currentProfile.expectations);
-    _locationController = TextEditingController(text: widget.currentProfile.location);
+    _bioController.text = widget.currentProfile.bio ?? '';
+    _workController.text = widget.currentProfile.work ?? '';
+    _locationController.text = widget.currentProfile.location;
+    _dateBidController.text = widget.currentProfile.currentDateBid ?? '';
     
-    // Fallback to empty string in case ProfileData hasn't been updated yet to include currentDateBid
-    _dateBidController = TextEditingController(text: ''); 
+    _fetchMasterData();
+  }
+
+  Future<void> _fetchMasterData() async {
+    final client = Supabase.instance.client;
+    final results = await Future.wait([
+      client.from('master_genders').select('name').order('id'),
+      client.from('master_expectations').select('name').order('id'),
+      client.from('master_education').select('name').order('id'),
+    ]);
+
+    if (mounted) {
+      setState(() {
+        _masterGenders = (results[0] as List).map((e) => e['name'] as String).toList();
+        _masterExpectations = (results[1] as List).map((e) => e['name'] as String).toList();
+        _masterEducation = (results[2] as List).map((e) => e['name'] as String).toList();
+        
+        // Initialize dropdowns with existing values
+        _selectedGender = _masterGenders.contains(widget.currentProfile.currentDateBid) ? widget.currentProfile.currentDateBid : null; // Logic depends on how you store gender
+        _selectedExpectation = _masterExpectations.contains(widget.currentProfile.expectations) ? widget.currentProfile.expectations : null;
+        _selectedEducation = _masterEducation.contains(widget.currentProfile.education) ? widget.currentProfile.education : null;
+        
+        _isLoadingData = false;
+      });
+    }
   }
 
   @override
   void dispose() {
     _bioController.dispose();
     _workController.dispose();
-    _eduController.dispose();
-    _expectationsController.dispose();
     _locationController.dispose();
     _dateBidController.dispose();
     super.dispose();
@@ -51,33 +78,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isSaving = true);
 
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
-
-      // Update the database directly, adding current_date_bid
       await Supabase.instance.client.from('profiles').update({
         'bio': _bioController.text.trim(),
         'work': _workController.text.trim(),
-        'education': _eduController.text.trim(),
-        'expectations': _expectationsController.text.trim(),
+        'education': _selectedEducation, // Using master table selection
+        'expectations': _selectedExpectation, // Using master table selection
         'location': _locationController.text.trim(),
         'current_date_bid': _dateBidController.text.trim(),
+        'gender': _selectedGender,
       }).eq('id', userId);
 
       if (!mounted) return;
-      
-      // Pop the screen and return 'true' to tell ProfileScreen to refresh
       Navigator.pop(context, true); 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!')));
-      
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated!')));
     } catch (e) {
-      debugPrint('Update error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update profile.')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update.')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -85,112 +104,57 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Edit Details', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
-      ),
+      appBar: AppBar(title: const Text('Edit Details')),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            // --- ADDED DATE BID FIELD AT THE TOP SO IT STANDS OUT ---
-            _buildTextField(
-              controller: _dateBidController,
-              label: 'Active Date Bid 🥂',
-              hint: 'e.g., Coffee at Starbucks Bandra, 4PM Friday',
-              maxLength: 60,
+            _buildTextField(_dateBidController, 'Active Date Bid 🥂', 'e.g., Coffee at 4PM'),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Gender', border: OutlineInputBorder()),
+              value: _selectedGender,
+              items: _masterGenders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+              onChanged: (val) => setState(() => _selectedGender = val),
             ),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _bioController,
-              label: 'Bio',
-              hint: 'A bit about me...',
-              maxLines: 4,
-              maxLength: 250,
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Expectations', border: OutlineInputBorder()),
+              value: _selectedExpectation,
+              items: _masterExpectations.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (val) => setState(() => _selectedExpectation = val),
             ),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _expectationsController,
-              label: 'Expectations',
-              hint: 'What are you looking for?',
-              maxLength: 100,
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Education', border: OutlineInputBorder()),
+              value: _selectedEducation,
+              items: _masterEducation.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (val) => setState(() => _selectedEducation = val),
             ),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _workController,
-              label: 'Work',
-              hint: 'Job Title / Company',
-              maxLength: 40,
-            ),
+            _buildTextField(_workController, 'Work', 'Job Title / Company'),
             const SizedBox(height: 16),
-            _buildTextField(
-              controller: _eduController,
-              label: 'Education',
-              hint: 'University / College',
-              maxLength: 40,
+            _buildTextField(_bioController, 'Bio', 'About me...', maxLines: 4),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: _isSaving ? null : _saveChanges,
+              child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('Save Changes'),
             ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              controller: _locationController,
-              label: 'Location',
-              hint: 'City, Country',
-              maxLength: 40,
-            ),
-            const SizedBox(height: 40),
-            
-            SizedBox(
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: _isSaving ? null : _saveChanges,
-                child: _isSaving 
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-              ),
-            ),
-            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    int maxLines = 1,
-    int? maxLength,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          maxLines: maxLines,
-          maxLength: maxLength,
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: true,
-            fillColor: Colors.grey[100],
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          ),
-        ),
-      ],
+  Widget _buildTextField(TextEditingController controller, String label, String hint, {int maxLines = 1}) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder()),
     );
   }
 }

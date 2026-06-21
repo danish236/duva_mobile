@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import 'edit_profile_screen.dart'; 
+import '../theme.dart';
 
 // ---------------------------------------------------------
 // 1. DATA MODEL
@@ -128,7 +129,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (_isLoading) return Scaffold(body: Center(child: CircularProgressIndicator(color: colorScheme.primary)));
 
     if (_errorMessage != null || _myProfile == null) {
       return Scaffold(
@@ -137,7 +140,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(_errorMessage ?? 'Profile not found.', style: const TextStyle(fontSize: 16)),
+              Text(_errorMessage ?? 'Profile not found.', style: TextStyle(fontSize: 16, color: colorScheme.onSurface)),
               const SizedBox(height: 20),
               ElevatedButton(onPressed: _signOut, child: const Text('Sign Out'))
             ],
@@ -149,14 +152,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = _myProfile!;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
+        title: const Text('My Profile'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_note, color: Colors.black),
+            icon: const Icon(Icons.edit_note),
             onPressed: () async {
               final didUpdate = await Navigator.push(
                 context,
@@ -169,11 +169,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.black),
+            icon: const Icon(Icons.notifications_none),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
           ),
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.black),
+            icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
           ),
         ],
@@ -185,15 +185,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0]),
 
             _buildInfoCard(
+              colorScheme: colorScheme,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '${profile.firstName}, ${profile.age}',
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
                   ),
                   const SizedBox(height: 12),
-                  // THIS IS THE NEW WRAP WIDGET FOR INFO
                   Wrap(
                     spacing: 16.0, 
                     runSpacing: 8.0, 
@@ -202,27 +202,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                          Icon(Icons.location_on, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
                           const SizedBox(width: 4),
-                          Text(profile.location, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                          Text(profile.location, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
                         ],
                       ),
                       if (profile.work != null && profile.work!.isNotEmpty)
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.work, size: 16, color: Colors.grey),
+                            Icon(Icons.work, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
                             const SizedBox(width: 4),
-                            Text(profile.work!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                            Text(profile.work!, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
                           ],
                         ),
                       if (profile.education != null && profile.education!.isNotEmpty)
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.school, size: 16, color: Colors.grey),
+                            Icon(Icons.school, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
                             const SizedBox(width: 4),
-                            Text(profile.education!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                            Text(profile.education!, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
                           ],
                         ),
                     ],
@@ -237,12 +237,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 padding: const EdgeInsets.all(20.0),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFF9A9E), Color(0xFFFECFEF)],
+                    colors: [AppTheme.hotPink, AppTheme.skySurge],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: const Color(0xFFFF9A9E).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                  boxShadow: [BoxShadow(color: AppTheme.hotPink.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,19 +264,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
 
             if (profile.bio != null && profile.bio!.isNotEmpty)
-              _buildPromptCard('A bit about me...', profile.bio!),
+              _buildPromptCard('A bit about me...', profile.bio!, colorScheme),
 
             if (profile.images.length > 1) _buildFullWidthImage(profile.images[1]),
 
             if (profile.expectations != null && profile.expectations!.isNotEmpty)
-              _buildPromptCard('What I am looking for', profile.expectations!),
+              _buildPromptCard('What I am looking for', profile.expectations!, colorScheme),
 
             if (profile.interests.isNotEmpty)
               _buildInfoCard(
+                colorScheme: colorScheme,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Interests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    Text('Interests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.6))),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8.0, 
@@ -284,9 +285,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: profile.interests.map((interest) {
                         return Chip(
                           label: Text(interest),
-                          backgroundColor: Colors.white,
-                          side: BorderSide(color: Colors.grey[300]!),
-                          labelStyle: const TextStyle(fontWeight: FontWeight.w500),
+                          backgroundColor: colorScheme.background,
+                          side: BorderSide.none,
+                          labelStyle: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w500),
                         );
                       }).toList(),
                     ),
@@ -323,12 +324,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoCard({required Widget child}) {
+  Widget _buildInfoCard({required Widget child, required ColorScheme colorScheme}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))],
       ),
@@ -336,21 +337,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPromptCard(String promptTitle, String promptAnswer) {
+  Widget _buildPromptCard(String promptTitle, String promptAnswer, ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(promptTitle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text(promptTitle, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.6))),
           const SizedBox(height: 8),
-          Text(promptAnswer, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.3)),
+          Text(promptAnswer, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.3, color: colorScheme.onSurface)),
         ],
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_screen.dart';
+import '../theme.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,8 +15,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
-  
-  // 0: Empty, 1: Weak (Red), 2: Medium (Orange), 3: Strong (Green)
   int _passwordStrength = 0; 
 
   @override
@@ -48,7 +47,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_passwordStrength == 1) return Colors.redAccent;
     if (_passwordStrength == 2) return Colors.orangeAccent;
     if (_passwordStrength == 3) return Colors.green;
-    return Colors.grey[300]!;
+    return Theme.of(context).colorScheme.surface;
   }
 
   String _getStrengthText() {
@@ -66,20 +65,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      
+      await Supabase.instance.client.auth.signUp(email: _emailController.text.trim(), password: _passwordController.text.trim());
       if (!mounted) return;
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OnboardingScreen()));
-      
     } on AuthException catch (e) {
       if (!mounted) return;
       if (e.message.toLowerCase().contains('rate limit')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Too many attempts. Please try again in an hour.'), backgroundColor: Colors.orange)
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Too many attempts. Please try again in an hour.'), backgroundColor: Colors.orange));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       }
@@ -93,33 +85,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
-      ),
+      appBar: AppBar(),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Create an Account', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+              Text('Create an Account', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
               const SizedBox(height: 8),
-              const Text('Join Duva to find your perfect alignment.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+              Text('Join Duva to find your perfect alignment.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
               const SizedBox(height: 48),
               
               TextField(
                 controller: _emailController, 
                 keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: 'Email Address',
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                )
+                decoration: const InputDecoration(labelText: 'Email Address')
               ),
               const SizedBox(height: 16),
               
@@ -128,38 +112,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 obscureText: !_isPasswordVisible,
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                   suffixIcon: IconButton(
-                    icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.grey),
+                    icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: colorScheme.onSurface.withValues(alpha: 0.6)),
                     onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               
-              // --- LIVE STRENGTH INDICATOR ---
               Row(
                 children: [
-                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 1 ? _getStrengthColor() : Colors.grey[200], borderRadius: BorderRadius.circular(2)))),
+                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 1 ? _getStrengthColor() : colorScheme.surface, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(width: 4),
-                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 2 ? _getStrengthColor() : Colors.grey[200], borderRadius: BorderRadius.circular(2)))),
+                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 2 ? _getStrengthColor() : colorScheme.surface, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(width: 4),
-                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 3 ? _getStrengthColor() : Colors.grey[200], borderRadius: BorderRadius.circular(2)))),
+                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 3 ? _getStrengthColor() : colorScheme.surface, borderRadius: BorderRadius.circular(2)))),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(_getStrengthText(), style: TextStyle(color: _passwordStrength == 0 ? Colors.grey : _getStrengthColor(), fontSize: 12, fontWeight: FontWeight.bold)),
-              // --------------------------------
+              Text(_getStrengthText(), style: TextStyle(color: _passwordStrength == 0 ? colorScheme.onSurface.withValues(alpha: 0.6) : _getStrengthColor(), fontSize: 12, fontWeight: FontWeight.bold)),
               
               const SizedBox(height: 48),
               SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                   onPressed: _isLoading ? null : _signUp,
-                  child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Register', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Register'),
                 ),
               ),
             ],

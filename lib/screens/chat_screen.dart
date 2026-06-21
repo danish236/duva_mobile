@@ -2,18 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../theme.dart';
 
 class ChatScreen extends StatefulWidget {
   final String matchId;
   final String matchName;
   final String matchImage;
 
-  const ChatScreen({
-    super.key, 
-    required this.matchId, 
-    required this.matchName, 
-    required this.matchImage
-  });
+  const ChatScreen({super.key, required this.matchId, required this.matchName, required this.matchImage});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -23,8 +19,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final Dio dio = Dio();
-  
-  // Replace with your actual Cloudflare Worker URL
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
   
   List<dynamic> _messages = [];
@@ -36,16 +30,12 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _myUserId = Supabase.instance.client.auth.currentUser?.id;
     _fetchMessages();
-    
-    // THE TRICK: Poll every 3 seconds instead of keeping a heavy WebSocket open
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      _fetchMessages(isPolling: true);
-    });
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages(isPolling: true));
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel(); // CRITICAL: Stop polling when user leaves screen
+    _pollingTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -60,75 +50,46 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final options = await _getSecureOptions();
       final response = await dio.get('$apiUrl/messages/${widget.matchId}', options: options);
-      
       if (mounted) {
-        setState(() {
-          _messages = response.data;
-        });
-        
-        // Only jump to bottom on initial load, not every poll (so user can scroll up)
-        if (!isPolling && _messages.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-        }
+        setState(() => _messages = response.data);
+        if (!isPolling && _messages.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       }
-    } catch (e) {
-      debugPrint("Polling error (ignored): $e");
-    }
+    } catch (e) { debugPrint("Polling error: $e"); }
   }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-
-    // Optimistic UI update (shows instantly)
-    setState(() {
-      _messages.add({
-        'sender_id': _myUserId,
-        'content': text,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    });
+    setState(() => _messages.add({'sender_id': _myUserId, 'content': text, 'created_at': DateTime.now().toIso8601String()}));
     _messageController.clear();
     _scrollToBottom();
-
     try {
       final options = await _getSecureOptions();
-      await dio.post(
-        '$apiUrl/messages/${widget.matchId}', 
-        data: {'content': text},
-        options: options
-      );
+      await dio.post('$apiUrl/messages/${widget.matchId}', data: {'content': text}, options: options);
     } catch (e) {
-      debugPrint("Send Error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send message')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send message')));
     }
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
+    if (_scrollController.hasClients) _scrollController.animateTo(_scrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
         title: Row(
           children: [
             CircleAvatar(backgroundImage: NetworkImage(widget.matchImage), radius: 18),
             const SizedBox(width: 12),
-            Text(widget.matchName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            Text(widget.matchName, style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -142,44 +103,35 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isMe = msg['sender_id'] == _myUserId;
-
                 return Align(
                   alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    // 1. Remove maxWidth from here
-                    margin: const EdgeInsets.only(bottom: 8), 
-                    
-                    // 2. Add it here using BoxConstraints
                     constraints: const BoxConstraints(maxWidth: 250), 
-                    
+                    margin: const EdgeInsets.only(bottom: 8), 
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isMe ? Colors.blueAccent : Colors.white,
+                      color: isMe ? AppTheme.hotPink : colorScheme.surface,
                       borderRadius: BorderRadius.circular(20).copyWith(
                         bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(20),
                         bottomLeft: !isMe ? const Radius.circular(0) : const Radius.circular(20),
                       ),
-                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5)],
                     ),
-                    child: Text(
-                      msg['content'],
-                      style: TextStyle(color: isMe ? Colors.white : Colors.black87, fontSize: 16),
-                    ),
+                    child: Text(msg['content'], style: TextStyle(color: isMe ? Colors.white : colorScheme.onSurface, fontSize: 16)),
                   ),
                 );
               },
             ),
           ),
-          _buildMessageInput(),
+          _buildMessageInput(colorScheme),
         ],
       ),
     );
   }
 
-  Widget _buildMessageInput() {
+  Widget _buildMessageInput(ColorScheme colorScheme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(color: Colors.white),
+      decoration: BoxDecoration(color: colorScheme.surface),
       child: SafeArea(
         child: Row(
           children: [
@@ -188,25 +140,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 controller: _messageController,
                 decoration: InputDecoration(
                   hintText: 'Type a message...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                   filled: true,
-                  fillColor: Colors.grey[200],
+                  fillColor: colorScheme.background,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
-                textCapitalization: TextCapitalization.sentences,
               ),
             ),
             const SizedBox(width: 8),
             CircleAvatar(
-              backgroundColor: Colors.blueAccent,
+              backgroundColor: AppTheme.skySurge,
               radius: 24,
-              child: IconButton(
-                icon: const Icon(Icons.send, color: Colors.white),
-                onPressed: _sendMessage,
-              ),
+              child: IconButton(icon: const Icon(Icons.send, color: Colors.white), onPressed: _sendMessage),
             ),
           ],
         ),
