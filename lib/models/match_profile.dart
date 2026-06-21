@@ -20,4 +20,15 @@ class MatchProfile {
     required this.interests,
     required this.images,
   });
+
+  factory MatchProfile.fromJson(Map<String, dynamic> json) {
+  return MatchProfile(
+    id: json['id'],
+    firstName: json['first_name'],
+    age: json['age'],
+    location: json['location'],
+    interests: List<String>.from(json['interests']),
+    images: List<String>.from(json['images']),
+  );
+}
 }
