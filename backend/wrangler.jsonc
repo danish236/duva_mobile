@@ -9,5 +9,8 @@
             "binding": "duva_images",
             "remote": true
         }
-    ]
+    ],
+    "vars": {
+        "R2_PUBLIC_URL": "https://pub-14d6730afe75454abee3a5b34ad3e194.r2.dev"
+    }
 }

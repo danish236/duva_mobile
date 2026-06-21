@@ -6,6 +6,7 @@ type Bindings = {
   duva_images: R2Bucket;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
+  R2_PUBLIC_URL: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -29,20 +30,26 @@ app.post('/upload', async (c) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const body = await c.req.parseBody();
-    const file = body['image'];
-    if (!file || !(file instanceof File)) return c.json({ error: 'Invalid file' }, 400);
+    // Using formData() is more robust for file uploads than parseBody()
+    const formData = await c.req.formData();
+    const file = formData.get('image');
+    
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: 'Invalid file or no file uploaded' }, 400);
+    }
 
     const fileName = `profile_${user.id}_${Date.now()}`;
+    // Accessing the bucket correctly using the binding name
     await c.env.duva_images.put(fileName, await file.arrayBuffer(), {
       httpMetadata: { contentType: file.type },
     });
 
-    // Replace with your R2 Public Dev URL ID
-    const publicUrl = `https://pub-<YOUR_R2_DEV_ID>.r2.dev/${fileName}`; 
+    const publicUrl = `${c.env.R2_PUBLIC_URL}/${fileName}`;
     return c.json({ url: publicUrl, success: true });
   } catch (e) {
-    return c.json({ error: 'Upload failed' }, 500);
+    // THIS LINE IS THE KEY: It forces the error to appear in your 'wrangler tail' logs
+    console.error("UPLOAD CRASH:", e);
+    return c.json({ error: 'Upload failed: ' + String(e) }, 500);
   }
 });
 
