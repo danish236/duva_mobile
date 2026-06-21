@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/match_profile.dart'; // Import your new model
+import 'package:dio/dio.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/match_profile.dart'; 
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -11,53 +13,93 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   // PageController manages the horizontal swiping between users
   final PageController _pageController = PageController();
+  List<MatchProfile> _potentialMatches = [];
+  bool _isLoading = true;
+  final dio = Dio();
 
-  // Mock Data: This will later be populated via your Hono.js/Supabase API
-  final List<MatchProfile> _potentialMatches = [
-    const MatchProfile(
-      id: 'usr_1',
-      firstName: 'Sarah',
-      age: 26,
-      location: 'Mumbai, India',
-      bio: 'Looking for someone to argue about movies with.',
-      expectations: 'Long-term relationship, mutual growth.',
-      interests: ['Cinematography', 'Sushi', 'Travel', 'Indie Music'],
-      images: [
-        'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=80&w=800&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=800&auto=format&fit=crop',
-      ],
-    ),
-    const MatchProfile(
-      id: 'usr_2',
-      firstName: 'Rohan',
-      age: 28,
-      location: 'Pune, India',
-      bio: 'Software dev by day, amateur chef by night.',
-      expectations: 'Casual dating leading to something serious.',
-      interests: ['Cooking', 'Tech', 'Dogs', 'Hiking'],
-      images: [
-        'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=800&auto=format&fit=crop',
-      ],
-    ),
-  ];
+  // Your deployed Cloudflare URL
+  final String apiUrl = 'https://backend.duvamobile.workers.dev';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPool();
+  }
+
+  // --- GET SECURE HEADERS ---
+  // This grabs the Supabase JWT token so the Edge API knows who is swiping
+  Future<Options> _getSecureOptions() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    return Options(headers: {
+      'Authorization': 'Bearer ${session?.accessToken}',
+    });
+  }
+
+  // --- FETCH USERS ---
+  Future<void> _fetchPool() async {
+    try {
+      final options = await _getSecureOptions();
+      final response = await dio.get('$apiUrl/pool', options: options);
+      
+      final List<dynamic> data = response.data;
+      setState(() {
+        _potentialMatches = data.map((json) => MatchProfile.fromJson(json)).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching pool: $e");
+      setState(() => _isLoading = false);
+    }
+  }
 
   /// Handles the action of liking or passing a profile, then advances the feed
-  void _handleSwipeAction(bool isLike, String profileId) {
-    // TODO: Send background request to Hono.js/Supabase to log the swipe
-    print(isLike ? 'Liked $profileId' : 'Passed $profileId');
+  Future<void> _handleSwipeAction(bool isLike, String profileId) async {
+    try {
+      final options = await _getSecureOptions();
+      
+      // 1. Send the background request to Hono to log the swipe
+      final response = await dio.post(
+        '$apiUrl/swipe',
+        data: {
+          'swiped_id': profileId,
+          'action': isLike ? 'like' : 'pass'
+        },
+        options: options,
+      );
 
-    // Move to the next profile in the feed smoothly
-    if (_pageController.page != null &&
-        _pageController.page!.toInt() < _potentialMatches.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      // Out of matches for the day (Ties into your 3-matches/24hr freemium model)
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You have viewed all your daily matches!')),
-      );
+      // 2. Check for mutual match (Zenith Alignment)
+      if (response.data['isMatch'] == true) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✨ Zenith Alignment! It\'s a Match! ✨', style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.purple,
+            duration: Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
+      // 3. Move to the next profile in the feed smoothly
+      if (_pageController.page != null &&
+          _pageController.page!.toInt() < _potentialMatches.length - 1) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        // Out of matches for the day
+        setState(() {
+          _potentialMatches.clear(); 
+        });
+      }
+    } catch (e) {
+      debugPrint("Swipe Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error. Try again.')),
+        );
+      }
     }
   }
 
@@ -69,6 +111,30 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Show a loading spinner while fetching the pool from Cloudflare
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Show empty state if there are no matches returned
+    if (_potentialMatches.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.grey[200],
+        appBar: AppBar(
+          title: const Text('Duva Pool', style: TextStyle(fontWeight: FontWeight.bold)),
+          centerTitle: true,
+          backgroundColor: Colors.white,
+          elevation: 1,
+        ),
+        body: const Center(
+          child: Text("You're out of matches for today!", style: TextStyle(fontSize: 18, color: Colors.grey)),
+        ),
+      );
+    }
+
+    // Render the standard feed
     return Scaffold(
       backgroundColor: Colors.grey[200], // Distinct background to pop the cards
       appBar: AppBar(
@@ -136,7 +202,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ),
 
                     // Bio Prompt
-                    if (profile.bio != null)
+                    if (profile.bio != null && profile.bio!.isNotEmpty)
                       _buildContentBlock('A bit about me...', profile.bio!),
 
                     // Photo 2
@@ -144,31 +210,32 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       Image.network(profile.images[1], height: 400, fit: BoxFit.cover),
 
                     // Expectations Prompt
-                    if (profile.expectations != null)
+                    if (profile.expectations != null && profile.expectations!.isNotEmpty)
                       _buildContentBlock('What I am looking for', profile.expectations!),
 
                     // Interests Wrap
-                    Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Interests', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8.0,
-                            runSpacing: 8.0,
-                            children: profile.interests.map((interest) {
-                              return Chip(
-                                label: Text(interest),
-                                backgroundColor: Colors.blue[50],
-                                side: BorderSide.none,
-                              );
-                            }).toList(),
-                          ),
-                        ],
+                    if (profile.interests.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Interests', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8.0,
+                              runSpacing: 8.0,
+                              children: profile.interests.map((interest) {
+                                return Chip(
+                                  label: Text(interest),
+                                  backgroundColor: Colors.blue[50],
+                                  side: BorderSide.none,
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
