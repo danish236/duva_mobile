@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dio/dio.dart';
-import '../main.dart'; // Required to access the themeNotifier
+import '../theme_notifier.dart'; // Correct import for the toggle
 import '../theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,7 +23,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _deleteAccount() async {
-    final colorScheme = Theme.of(context).colorScheme;
     // 1. Show Warning Dialog
     final confirm = await showDialog<bool>(
       context: context,
@@ -46,7 +45,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final session = Supabase.instance.client.auth.currentSession;
       final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
+      
+      // Hit the Cloudflare Edge API to wipe data
       await dio.delete('$apiUrl/account', options: options);
+      
+      // Sign out to clear local session
       await Supabase.instance.client.auth.signOut();
       
       if (!mounted) return;
@@ -72,11 +75,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         iconTheme: IconThemeData(color: colorScheme.onSurface),
       ),
       body: _isProcessing 
-        ? const Center(child: CircularProgressIndicator(color: Colors.red))
+        ? Center(child: CircularProgressIndicator(color: colorScheme.error))
         : ListView(
             padding: const EdgeInsets.symmetric(vertical: 20),
             children: [
               _buildSectionHeader('Appearance', colorScheme),
+              // THE DARK MODE TOGGLE
               SwitchListTile(
                 secondary: Icon(Icons.dark_mode_outlined, color: colorScheme.onSurface),
                 title: Text('Dark Mode', style: TextStyle(color: colorScheme.onSurface)),

@@ -5,8 +5,8 @@ import 'screens/matches_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/login_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:duva_mobile/theme.dart';
-import 'theme_notifier.dart';
+import 'theme.dart';
+import 'theme_notifier.dart'; // Import this to access themeNotifier
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,23 +28,27 @@ class DuvaMobileApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Duva',
-      debugShowCheckedModeBanner: false,
-      // --- THEME APPLIED CORRECTLY HERE ---
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system, 
-      // -------------------------
-      home: StreamBuilder<AuthState>(
-        stream: Supabase.instance.client.auth.onAuthStateChange,
-        builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data!.session != null) {
-            return const MainLayout();
-          }
-          return const LoginScreen();
-        },
-      ),
+    // This ValueListenableBuilder listens to your theme toggle
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (_, mode, __) {
+        return MaterialApp(
+          title: 'Duva Mobile',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: mode, 
+          home: StreamBuilder<AuthState>(
+            stream: Supabase.instance.client.auth.onAuthStateChange,
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data!.session != null) {
+                return const MainLayout();
+              }
+              return const LoginScreen();
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -82,7 +86,7 @@ class _MainLayoutState extends State<MainLayout> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: AppTheme.hotPink, // Neon pink for active tab!
+        selectedItemColor: AppTheme.hotPink, 
         unselectedItemColor: Colors.grey,
         onTap: _onItemTapped,
       ),
