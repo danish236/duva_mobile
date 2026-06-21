@@ -122,9 +122,10 @@ app.get('/pool', async (c) => {
         firstName: profile.first_name,
         age: age,
         location: profile.location,
-        distance: distanceKm, // Pass distance to frontend
+        distance: distanceKm, 
         bio: profile.bio,
         expectations: profile.expectations,
+        currentDateBid: profile.current_date_bid, // <--- ADD THIS LINE
         images: profile.images || [],
         interests: theirInterestNames,
         sharedInterestsCount: sharedCount 

@@ -8,6 +8,7 @@ class MatchProfile {
   final String? expectations;
   final String? work;
   final String? education;
+  final String? currentDateBid;
   final List<String> interests;
   final List<String> images;
   final int sharedInterestsCount; // New Field
@@ -22,6 +23,7 @@ class MatchProfile {
     this.expectations,
     this.work,
     this.education,
+    this.currentDateBid,
     required this.interests,
     required this.images,
     this.sharedInterestsCount = 0,
@@ -38,6 +40,7 @@ class MatchProfile {
       expectations: json['expectations'],
       work: json['work'],
       education: json['education'],
+      currentDateBid: json['currentDateBid'],
       interests: json['interests'] != null ? List<String>.from(json['interests']) : [],
       images: json['images'] != null ? List<String>.from(json['images']) : [],
       sharedInterestsCount: json['sharedInterestsCount'] ?? 0,

@@ -44,7 +44,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
       if (permission == LocationPermission.deniedForever) return;
 
-      // --- FIXED: Using the new LocationSettings format to fix deprecation warning ---
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
@@ -414,20 +413,62 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                                      const SizedBox(width: 4),
-                                      Text('${profile.location} • ${profile.distance} km away', style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                                    ],
-                                  ),
-                                ],
+                              // Text & Location Info wrapped inside Expanded to avoid overflow and bracket errors
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                                        const SizedBox(width: 4),
+                                        Text('${profile.location} • ${profile.distance} km away', style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+
+                                    // --- NEW DATE BID UI ---
+                                    if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [Color(0xFFFF9A9E), Color(0xFFFECFEF)],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(color: const Color(0xFFFF9A9E).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4)),
+                                          ],
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Row(
+                                              children: [
+                                                Icon(Icons.local_activity, color: Colors.white, size: 20),
+                                                SizedBox(width: 8),
+                                                Text('ACTIVE DATE BID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.2, fontSize: 12)),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              profile.currentDateBid!,
+                                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, height: 1.3),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    // ------------------------
+                                  ],
+                                ),
                               ),
+                              
+                              // The 3 dots menu
                               PopupMenuButton<String>(
                                 icon: const Icon(Icons.more_horiz, color: Colors.grey),
                                 onSelected: (value) => _showSafetySheet(profile.id, profile.firstName, value),

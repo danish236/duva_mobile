@@ -20,6 +20,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _eduController;
   late TextEditingController _expectationsController;
   late TextEditingController _locationController;
+  
+  // --- NEW: Date Bid Controller ---
+  late TextEditingController _dateBidController;
 
   @override
   void initState() {
@@ -30,6 +33,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _eduController = TextEditingController(text: widget.currentProfile.education);
     _expectationsController = TextEditingController(text: widget.currentProfile.expectations);
     _locationController = TextEditingController(text: widget.currentProfile.location);
+    
+    // Fallback to empty string in case ProfileData hasn't been updated yet to include currentDateBid
+    _dateBidController = TextEditingController(text: ''); 
   }
 
   @override
@@ -39,6 +45,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _eduController.dispose();
     _expectationsController.dispose();
     _locationController.dispose();
+    _dateBidController.dispose();
     super.dispose();
   }
 
@@ -50,13 +57,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
 
-      // Update the database directly
+      // Update the database directly, adding current_date_bid
       await Supabase.instance.client.from('profiles').update({
         'bio': _bioController.text.trim(),
         'work': _workController.text.trim(),
         'education': _eduController.text.trim(),
         'expectations': _expectationsController.text.trim(),
         'location': _locationController.text.trim(),
+        'current_date_bid': _dateBidController.text.trim(),
       }).eq('id', userId);
 
       if (!mounted) return;
@@ -90,6 +98,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            // --- ADDED DATE BID FIELD AT THE TOP SO IT STANDS OUT ---
+            _buildTextField(
+              controller: _dateBidController,
+              label: 'Active Date Bid 🥂',
+              hint: 'e.g., Coffee at Starbucks Bandra, 4PM Friday',
+              maxLength: 60,
+            ),
+            const SizedBox(height: 16),
             _buildTextField(
               controller: _bioController,
               label: 'Bio',

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
-import 'edit_profile_screen.dart'; // We will create this next!
+import 'edit_profile_screen.dart'; 
 
 // ---------------------------------------------------------
 // 1. DATA MODEL
@@ -18,6 +18,7 @@ class ProfileData {
   final String? education;
   final List<String> images; 
   final String? expectations;
+  final String? currentDateBid; // <--- PROPERLY ADDED HERE
   final List<String> interests; 
 
   ProfileData({
@@ -31,6 +32,7 @@ class ProfileData {
     this.education,
     required this.images,
     this.expectations,
+    this.currentDateBid, // <--- PROPERLY ADDED HERE
     required this.interests,
   });
 
@@ -64,6 +66,7 @@ class ProfileData {
       education: json['education'],
       images: json['images'] != null ? List<String>.from(json['images']) : [],
       expectations: json['expectations'],
+      currentDateBid: json['current_date_bid'], // <--- PROPERLY PARSED HERE
       interests: parsedInterests,
     );
   }
@@ -119,7 +122,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Restored for the fallback error screen
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
   }
@@ -153,11 +155,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // --- NEW EDIT PROFILE BUTTON ---
           IconButton(
             icon: const Icon(Icons.edit_note, color: Colors.black),
             onPressed: () async {
-              // Wait for the edit screen to pop. If it returns true, refresh data!
               final didUpdate = await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => EditProfileScreen(currentProfile: profile)),
@@ -177,7 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
           ),
         ],
-      ), // <-- FIX: Closing parenthesis added here!
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -221,6 +221,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+
+            // --- SHOW THE USER THEIR OWN DATE BID ---
+            if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding: const EdgeInsets.all(20.0),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF9A9E), Color(0xFFFECFEF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: const Color(0xFFFF9A9E).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.local_activity, color: Colors.white, size: 20),
+                        SizedBox(width: 8),
+                        Text('MY ACTIVE DATE BID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.2, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      profile.currentDateBid!,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
 
             if (profile.bio != null && profile.bio!.isNotEmpty)
               _buildPromptCard('A bit about me...', profile.bio!),
