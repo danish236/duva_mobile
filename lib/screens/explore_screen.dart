@@ -12,13 +12,11 @@ class ExploreScreen extends StatefulWidget {
 }
 
 class _ExploreScreenState extends State<ExploreScreen> {
-  // PageController manages the horizontal swiping between users
   final PageController _pageController = PageController();
   List<MatchProfile> _potentialMatches = [];
   bool _isLoading = true;
   final dio = Dio();
 
-  // Your deployed Cloudflare URL
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
 
   @override
@@ -27,8 +25,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _fetchPool();
   }
 
-  // --- GET SECURE HEADERS ---
-  // This grabs the Supabase JWT token so the Edge API knows who is swiping
   Future<Options> _getSecureOptions() async {
     final session = Supabase.instance.client.auth.currentSession;
     return Options(headers: {
@@ -36,7 +32,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     });
   }
 
-  // --- FETCH USERS ---
   Future<void> _fetchPool() async {
     try {
       final options = await _getSecureOptions();
@@ -53,12 +48,127 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  /// Handles the action of liking or passing a profile, then advances the feed
+  void _showPreferencesSheet() {
+    RangeValues currentAgeRange = const RangeValues(18, 40);
+    String selectedExpectation = 'Any';
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      // FIX: Renamed context to sheetContext to prevent async shadowing issues
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder: (BuildContext innerContext, StateSetter setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+                left: 24, right: 24, top: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Discovery Preferences', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Age Range', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      Text('${currentAgeRange.start.round()} - ${currentAgeRange.end.round()}', style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  RangeSlider(
+                    values: currentAgeRange,
+                    min: 18,
+                    max: 65,
+                    divisions: 47,
+                    activeColor: Colors.blueAccent,
+                    onChanged: (RangeValues values) {
+                      setSheetState(() => currentAgeRange = values);
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  const Text('Looking For', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: selectedExpectation,
+                        items: ['Any', 'Long-term relationship', 'Casual dating', 'New friends'].map((String value) {
+                          return DropdownMenuItem<String>(value: value, child: Text(value));
+                        }).toList(),
+                        onChanged: (newValue) {
+                          setSheetState(() => selectedExpectation = newValue!);
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: isSaving ? null : () async {
+                        setSheetState(() => isSaving = true);
+                        try {
+                          final options = await _getSecureOptions();
+                          await dio.post(
+                            '$apiUrl/preferences',
+                            data: {
+                              'min_age': currentAgeRange.start.round(),
+                              'max_age': currentAgeRange.end.round(),
+                              'filter_expectation': selectedExpectation,
+                            },
+                            options: options,
+                          );
+                          
+                          // FIX: Check the specific sheetContext before popping
+                          if (!sheetContext.mounted) return;
+                          Navigator.pop(sheetContext); 
+                          
+                          setState(() {
+                            _isLoading = true;
+                            _potentialMatches.clear();
+                          });
+                          _fetchPool();
+                          
+                        } catch (e) {
+                          debugPrint("Error saving preferences: $e");
+                          setSheetState(() => isSaving = false);
+                        }
+                      },
+                      child: isSaving 
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Apply & Refresh Pool', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            );
+          }
+        );
+      },
+    );
+  }
+
   Future<void> _handleSwipeAction(bool isLike, String profileId) async {
     try {
       final options = await _getSecureOptions();
       
-      // 1. Send the background request to Hono to log the swipe
       final response = await dio.post(
         '$apiUrl/swipe',
         data: {
@@ -68,7 +178,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         options: options,
       );
 
-      // 2. Check for mutual match (Zenith Alignment)
       if (response.data['isMatch'] == true) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -81,7 +190,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         );
       }
 
-      // 3. Move to the next profile in the feed smoothly
       if (_pageController.page != null &&
           _pageController.page!.toInt() < _potentialMatches.length - 1) {
         _pageController.nextPage(
@@ -89,7 +197,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
           curve: Curves.easeInOut,
         );
       } else {
-        // Out of matches for the day
         setState(() {
           _potentialMatches.clear(); 
         });
@@ -112,32 +219,74 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Show a loading spinner while fetching the pool from Cloudflare
     if (_isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // Show empty state if there are no matches returned
+    // Show premium empty state if no matches are found
     if (_potentialMatches.isEmpty) {
       return Scaffold(
-        backgroundColor: Colors.grey[200],
+        backgroundColor: Colors.grey[50], // Slightly off-white for premium feel
         appBar: AppBar(
           title: const Text('Duva Pool', style: TextStyle(fontWeight: FontWeight.bold)),
           centerTitle: true,
           backgroundColor: Colors.white,
           elevation: 1,
+          actions: [
+            IconButton(icon: const Icon(Icons.tune, color: Colors.black), onPressed: _showPreferencesSheet),
+            IconButton(
+              icon: const Icon(Icons.notifications_none, color: Colors.black),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
-        body: const Center(
-          child: Text("You're out of matches for today!", style: TextStyle(fontSize: 18, color: Colors.grey)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_off_rounded, size: 80, color: Colors.grey[300]),
+                const SizedBox(height: 24),
+                const Text(
+                  'No Alignments Found', 
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'We couldn\'t find anyone matching your current preferences. Try broadening your horizons to see more people.', 
+                  textAlign: TextAlign.center, 
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.4)
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 2,
+                    ),
+                    icon: const Icon(Icons.tune, color: Colors.white),
+                    label: const Text('Update Preferences', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    // This directly triggers the Bottom Sheet we built!
+                    onPressed: _showPreferencesSheet, 
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
 
-    // Render the standard feed
+    // FIX: Re-added the missing return Scaffold block here
     return Scaffold(
-      backgroundColor: Colors.grey[200], // Distinct background to pop the cards
+      backgroundColor: Colors.grey[200], 
       appBar: AppBar(
         title: const Text('Duva Pool', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
@@ -145,12 +294,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
         elevation: 1,
         actions: [
           IconButton(
+            icon: const Icon(Icons.tune, color: Colors.black),
+            onPressed: _showPreferencesSheet,
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.black),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
             },
           ),
           const SizedBox(width: 8),
@@ -158,7 +308,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
       body: PageView.builder(
         controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(), // Forces users to use the action buttons
+        physics: const NeverScrollableScrollPhysics(), 
         itemCount: _potentialMatches.length,
         itemBuilder: (context, index) {
           return _buildRichProfileCard(_potentialMatches[index]);
@@ -167,7 +317,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  /// Extracts the complex UI building into a clean, private helper method
   Widget _buildRichProfileCard(MatchProfile profile) {
     return Padding(
       padding: const EdgeInsets.all(12.0),
@@ -182,17 +331,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
         clipBehavior: Clip.hardEdge,
         child: Column(
           children: [
-            // Scrollable Profile Content
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Photo 1 (Hero Image)
                     if (profile.images.isNotEmpty)
                       Image.network(profile.images[0], height: 450, fit: BoxFit.cover),
 
-                    // Basic Info Nameplate
                     Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: Column(
@@ -211,7 +357,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             ],
                           ),
                           
-                          // --- NEW SHARED INTERESTS BADGE ---
                           if (profile.sharedInterestsCount > 0)
                             Padding(
                               padding: const EdgeInsets.only(top: 12.0),
@@ -223,7 +368,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                   border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
                                 ),
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min, // Keeps the box wrapped tight around text
+                                  mainAxisSize: MainAxisSize.min, 
                                   children: [
                                     const Icon(Icons.stars, size: 16, color: Colors.purple),
                                     const SizedBox(width: 6),
@@ -239,19 +384,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ),
                     ),
 
-                    // Bio Prompt
                     if (profile.bio != null && profile.bio!.isNotEmpty)
                       _buildContentBlock('A bit about me...', profile.bio!),
 
-                    // Photo 2
                     if (profile.images.length > 1)
                       Image.network(profile.images[1], height: 400, fit: BoxFit.cover),
 
-                    // Expectations Prompt
                     if (profile.expectations != null && profile.expectations!.isNotEmpty)
                       _buildContentBlock('What I am looking for', profile.expectations!),
 
-                    // Interests Wrap
                     if (profile.interests.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.all(20.0),
@@ -279,7 +420,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
             ),
 
-            // Fixed Action Bar (Accept/Reject)
             _buildDecisionActionBar(profile.id),
           ],
         ),
@@ -287,7 +427,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  /// Standardized text block component for prompts
   Widget _buildContentBlock(String title, String content) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
@@ -302,7 +441,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  /// The bottom fixed bar containing the Match/Pass buttons
   Widget _buildDecisionActionBar(String profileId) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 40.0),
@@ -313,7 +451,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // Pass Button
           FloatingActionButton(
             heroTag: 'pass_$profileId',
             onPressed: () => _handleSwipeAction(false, profileId),
@@ -322,11 +459,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
             elevation: 2,
             child: const Icon(Icons.close, size: 32),
           ),
-          // Like Button
           FloatingActionButton(
             heroTag: 'like_$profileId',
             onPressed: () => _handleSwipeAction(true, profileId),
-            backgroundColor: Colors.blueAccent, // Duva primary brand color
+            backgroundColor: Colors.blueAccent, 
             foregroundColor: Colors.white,
             elevation: 4,
             child: const Icon(Icons.favorite, size: 32),

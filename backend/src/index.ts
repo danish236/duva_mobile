@@ -46,67 +46,64 @@ app.post('/upload', async (c) => {
   }
 });
 
-// --- 2. THE SMART POOL ROUTE (BASIC MATCHING) ---
+// --- 2. THE SMART POOL ROUTE (With Strict Preferences) ---
 app.get('/pool', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // 1. Get IDs of people I've already swiped on so I don't see them again
+    // 1. Get My Profile (for my preferences)
+    const { data: myProfile } = await supabase.from('profiles').select('min_age, max_age, filter_expectation').eq('id', user.id).single();
+    const minAge = myProfile?.min_age || 18;
+    const maxAge = myProfile?.max_age || 65;
+    const filterExpectation = myProfile?.filter_expectation;
+
+    // 2. Get IDs of people I've already swiped on
     const { data: swipes } = await supabase.from('swipes').select('swiped_id').eq('swiper_id', user.id);
     const swipedIds = (swipes || []).map(s => s.swiped_id);
-    swipedIds.push(user.id); // Add my own ID so I don't swipe on myself
+    swipedIds.push(user.id);
 
-    // 2. Get MY specific interests
+    // 3. Get MY specific interests
     const { data: myInterestsData } = await supabase.from('profile_interests').select('interest_id').eq('profile_id', user.id);
     const myInterests = (myInterestsData || []).map(i => i.interest_id);
 
-    // 3. Fetch the unswiped pool WITH their joined interests
-    let poolQuery = supabase.from('profiles').select(`
-      *,
-      profile_interests ( interest_id, master_interests ( name ) )
-    `);
+    // 4. Fetch the unswiped pool
+    let poolQuery = supabase.from('profiles').select(`*, profile_interests ( interest_id, master_interests ( name ) )`);
+    if (swipedIds.length > 0) poolQuery = poolQuery.not('id', 'in', `(${swipedIds.join(',')})`);
     
-    // Safely exclude people we've swiped on
-    if (swipedIds.length > 0) {
-      poolQuery = poolQuery.not('id', 'in', `(${swipedIds.join(',')})`);
-    }
+    // APPLY EXPECTATION FILTER AT DATABASE LEVEL
+    if (filterExpectation) poolQuery = poolQuery.eq('expectations', filterExpectation);
 
-    const { data: rawPool, error } = await poolQuery.limit(20);
+    const { data: rawPool, error } = await poolQuery.limit(50);
     if (error) throw error;
 
-    // 4. ALGORITHM: Calculate Shared Interests & Format Data
-    const scoredPool = (rawPool || []).map(profile => {
-      const theirInterests = profile.profile_interests || [];
-      const theirInterestIds = theirInterests.map((pi: any) => pi.interest_id);
-      const theirInterestNames = theirInterests.map((pi: any) => pi.master_interests?.name).filter(Boolean);
-      
-      // Count how many overlapping IDs exist
-      const sharedCount = theirInterestIds.filter((id: number) => myInterests.includes(id)).length;
-      
-      // Calculate Age from DOB
-      const age = profile.dob ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / 31557600000) : 18;
+    // 5. ALGORITHM: Filter Age & Calculate Shared Interests
+    const scoredPool = (rawPool || [])
+      .map(profile => {
+        const theirInterests = profile.profile_interests || [];
+        const theirInterestIds = theirInterests.map((pi: any) => pi.interest_id);
+        const theirInterestNames = theirInterests.map((pi: any) => pi.master_interests?.name).filter(Boolean);
+        const sharedCount = theirInterestIds.filter((id: number) => myInterests.includes(id)).length;
+        const age = profile.dob ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / 31557600000) : 18;
 
-      return {
-        id: profile.id,
-        firstName: profile.first_name, // Map to camelCase for Flutter
-        age: age,
-        location: profile.location,
-        bio: profile.bio,
-        work: profile.work,
-        education: profile.education,
-        expectations: profile.expectations,
-        images: profile.images || [],
-        interests: theirInterestNames,
-        sharedInterestsCount: sharedCount // Send the score to the frontend!
-      };
-    });
+        return {
+          id: profile.id,
+          firstName: profile.first_name,
+          age: age,
+          location: profile.location,
+          bio: profile.bio,
+          expectations: profile.expectations,
+          images: profile.images || [],
+          interests: theirInterestNames,
+          sharedInterestsCount: sharedCount 
+        };
+      })
+      // APPLY AGE FILTER IN MEMORY (Since age is dynamic based on DOB)
+      .filter(profile => profile.age >= minAge && profile.age <= maxAge);
 
-    // 5. Sort the pool so people with the MOST shared interests appear first
     scoredPool.sort((a, b) => b.sharedInterestsCount - a.sharedInterestsCount);
-
-    return c.json(scoredPool);
+    return c.json(scoredPool.slice(0, 20)); // Return top 20 matches
   } catch (e) {
     console.error(e);
     return c.json({ error: 'Failed to fetch pool' }, 500);
@@ -232,6 +229,50 @@ app.get('/notifications', async (c) => {
     return c.json(notifications || []);
   } catch (e) {
     return c.json({ error: 'Failed to fetch notifications' }, 500);
+  }
+});
+
+// --- 7. SAVE PREFERENCES ---
+app.post('/preferences', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { min_age, max_age, filter_expectation } = await c.req.json();
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        min_age: min_age, 
+        max_age: max_age, 
+        filter_expectation: filter_expectation === 'Any' ? null : filter_expectation 
+      })
+      .eq('id', user.id);
+
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: 'Failed to update preferences' }, 500);
+  }
+});
+
+// --- 8. ACCOUNT MANAGEMENT (Settings) ---
+app.delete('/account', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    // Hard delete the profile. (If you have CASCADE set up in Supabase, 
+    // this automatically wipes their swipes, interests, and messages too).
+    const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+    
+    if (error) throw error;
+    return c.json({ success: true, message: 'Account wiped successfully' });
+  } catch (e) {
+    console.error(e);
+    return c.json({ error: 'Failed to delete account' }, 500);
   }
 });
 

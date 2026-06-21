@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notifications_screen.dart';
+import 'settings_screen.dart';
+import 'edit_profile_screen.dart'; // We will create this next!
 
 // ---------------------------------------------------------
 // 1. DATA MODEL
@@ -41,9 +43,7 @@ class ProfileData {
     return age;
   }
 
-  // Factory to safely parse Supabase JSON, including nested joins
   factory ProfileData.fromJson(Map<String, dynamic> json) {
-    // Extract interests from the nested join table structure
     List<String> parsedInterests = [];
     if (json['profile_interests'] != null) {
       for (var item in (json['profile_interests'] as List)) {
@@ -92,28 +92,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _fetchMyProfile() async {
     try {
-      // 1. Get the securely logged-in user's ID
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      
-      if (userId == null) {
-        throw Exception('User is not logged in.');
-      }
+      if (userId == null) throw Exception('User is not logged in.');
 
-      // 2. Fetch profile data and explicitly join the interests tables
       final data = await Supabase.instance.client
           .from('profiles')
           .select('''
             *,
             profile_interests (
-              master_interests (
-                name
-              )
+              master_interests ( name )
             )
           ''')
           .eq('id', userId)
           .single();
 
-      // 3. Parse and update state
       setState(() {
         _myProfile = ProfileData.fromJson(data);
         _isLoading = false;
@@ -127,21 +119,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Restored for the fallback error screen
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
-    // The StreamBuilder in main.dart will automatically handle navigation!
   }
 
   @override
   Widget build(BuildContext context) {
-    // Show loading spinner while fetching data
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-    // Show error if data is missing (e.g., user signed up but didn't create a profile yet)
     if (_errorMessage != null || _myProfile == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('My Profile')),
@@ -151,10 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(_errorMessage ?? 'Profile not found.', style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _signOut,
-                child: const Text('Sign Out'),
-              )
+              ElevatedButton(onPressed: _signOut, child: const Text('Sign Out'))
             ],
           ),
         ),
@@ -170,42 +153,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // --- NEW EDIT PROFILE BUTTON ---
+          IconButton(
+            icon: const Icon(Icons.edit_note, color: Colors.black),
+            onPressed: () async {
+              // Wait for the edit screen to pop. If it returns true, refresh data!
+              final didUpdate = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => EditProfileScreen(currentProfile: profile)),
+              );
+              if (didUpdate == true) {
+                setState(() => _isLoading = true);
+                _fetchMyProfile();
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.black),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
           ),
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.black),
-            onPressed: () {
-              // Quick sign out menu for testing
-              showModalBottomSheet(
-                context: context,
-                builder: (context) => SafeArea(
-                  child: ListTile(
-                    leading: const Icon(Icons.logout, color: Colors.red),
-                    title: const Text('Sign Out', style: TextStyle(color: Colors.red)),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _signOut();
-                    },
-                  ),
-                ),
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
           ),
         ],
-      ),
+      ), // <-- FIX: Closing parenthesis added here!
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (profile.images.isNotEmpty)
-              _buildFullWidthImage(profile.images[0]),
+            if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0]),
 
             _buildInfoCard(
               child: Column(
@@ -248,8 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (profile.bio != null && profile.bio!.isNotEmpty)
               _buildPromptCard('A bit about me...', profile.bio!),
 
-            if (profile.images.length > 1)
-              _buildFullWidthImage(profile.images[1]),
+            if (profile.images.length > 1) _buildFullWidthImage(profile.images[1]),
 
             if (profile.expectations != null && profile.expectations!.isNotEmpty)
               _buildPromptCard('What I am looking for', profile.expectations!),
@@ -277,9 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            if (profile.images.length > 2)
-              _buildFullWidthImage(profile.images[2]),
-              
+            if (profile.images.length > 2) _buildFullWidthImage(profile.images[2]),
             const SizedBox(height: 40), 
           ],
         ),
@@ -292,32 +266,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.network(
-        imageUrl,
-        height: 400,
-        fit: BoxFit.cover,
+        imageUrl, height: 400, fit: BoxFit.cover,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
-          return const SizedBox(
-            height: 400,
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const SizedBox(height: 400, child: Center(child: CircularProgressIndicator()));
         },
         errorBuilder: (context, error, stackTrace) {
-          return Container(
-            height: 400,
-            color: Colors.grey[300],
-            child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)),
-          );
+          return Container(height: 400, color: Colors.grey[300], child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)));
         },
       ),
     );
@@ -330,13 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))],
       ),
       child: child,
     );
@@ -349,26 +302,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            promptTitle,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey),
-          ),
+          Text(promptTitle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
           const SizedBox(height: 8),
-          Text(
-            promptAnswer,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.3),
-          ),
+          Text(promptAnswer, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.3)),
         ],
       ),
     );
