@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide MultipartFile;
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
+import 'profile_screen.dart'; // Needed to route to the profile screen
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -97,8 +98,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       List<String> uploadedImageUrls = [];
       final dio = Dio();
-      const String uploadApiUrl =
-          'https://backend.duvamobile.workers.dev/upload';
+      const String uploadApiUrl = 'https://backend.duvamobile.workers.dev/upload';
 
       // 1. Upload Images to Cloudflare R2
       for (var imageFile in _selectedImages) {
@@ -160,7 +160,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           .insert(interestInserts);
 
       if (!mounted) return;
-      Navigator.pop(context);
+      
+      // Navigate to their new profile instead of the empty explore pool
+      Navigator.pushReplacement(
+        context, 
+        MaterialPageRoute(builder: (context) => const ProfileScreen()), 
+      );
+      
     } on DioException catch (e) {
       // This forces Dio to print the ACTUAL Cloudflare error message
       debugPrint('DIO CRASH DATA: ${e.response?.data}');
@@ -178,10 +184,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
     } catch (e) {
       debugPrint('Onboarding Error: $e');
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -202,14 +209,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _pickImage(int index) async {
+    // Massive compression applied here to save Cloudflare Space
     final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
+      source: ImageSource.gallery, 
+      imageQuality: 60, 
+      maxWidth: 1080,
+      maxHeight: 1080,
     );
     if (image != null) {
-      setState(() {
-        _selectedImages[index] = image;
-      });
+      setState(() => _selectedImages[index] = image);
     }
   }
 
@@ -262,6 +270,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  int _calculateAge(DateTime dob) {
+    final today = DateTime.now();
+    int age = today.year - dob.year;
+    if (today.month < dob.month || (today.month == dob.month && today.day < dob.day)) {
+      age--;
+    }
+    return age;
+  }
+
   Widget _buildStep1Basics() {
     return Padding(
       padding: const EdgeInsets.all(24.0),
@@ -276,6 +293,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _firstNameController,
+              textCapitalization: TextCapitalization.words,
+              keyboardType: TextInputType.name,
               decoration: const InputDecoration(
                 labelText: 'First Name',
                 border: OutlineInputBorder(),
@@ -285,6 +304,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _lastNameController,
+              textCapitalization: TextCapitalization.words,
+              keyboardType: TextInputType.name,
               decoration: const InputDecoration(
                 labelText: 'Last Name (Optional)',
                 border: OutlineInputBorder(),
@@ -294,6 +315,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _locationController,
+              textCapitalization: TextCapitalization.words,
+              keyboardType: TextInputType.streetAddress,
               decoration: const InputDecoration(
                 labelText: 'City, Country',
                 border: OutlineInputBorder(),
@@ -302,23 +325,63 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             const SizedBox(height: 24),
             ListTile(
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey[400]!),
+              ),
               title: Text(
                 _selectedDate == null
                     ? 'Select Date of Birth'
                     : 'DOB: ${_selectedDate!.toLocal().toString().split(' ')[0]}',
+                style: TextStyle(
+                  fontWeight: _selectedDate == null ? FontWeight.normal : FontWeight.bold,
+                  color: _selectedDate == null ? Colors.grey[700] : Colors.black,
+                ),
               ),
-              trailing: const Icon(Icons.calendar_today),
+              trailing: const Icon(Icons.calendar_today, color: Colors.blueAccent),
               onTap: () async {
                 final DateTime? picked = await showDatePicker(
                   context: context,
                   initialDate: DateTime(2000),
                   firstDate: DateTime(1950),
-                  lastDate: DateTime.now().subtract(const Duration(days: 6570)),
+                  lastDate: DateTime.now().subtract(const Duration(days: 6570)), // Must be 18
+                  builder: (context, child) {
+                    return Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.light(
+                          primary: Colors.blueAccent, 
+                          onPrimary: Colors.white, 
+                          onSurface: Colors.black, 
+                        ),
+                      ),
+                      child: child!,
+                    );
+                  },
                 );
                 if (picked != null) setState(() => _selectedDate = picked);
               },
             ),
+            
+            // --- NEW: AGE PREVIEW AND WARNING ---
+            if (_selectedDate != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12.0, left: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'You are ${_calculateAge(_selectedDate!)} years old.',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '⚠️ This cannot be changed later. If you need to update this after onboarding, documentation will be required.',
+                      style: TextStyle(fontSize: 12, color: Colors.redAccent, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -339,6 +402,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 32),
             TextField(
               controller: _bioController,
+              textCapitalization: TextCapitalization.sentences, 
+              keyboardType: TextInputType.multiline,
               maxLines: 4,
               maxLength: 250,
               decoration: const InputDecoration(
@@ -350,6 +415,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _expectationsController,
+              textCapitalization: TextCapitalization.sentences, 
               maxLength: 100,
               decoration: const InputDecoration(
                 labelText: 'Expectations',
@@ -360,6 +426,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _workController,
+              textCapitalization: TextCapitalization.words, 
               maxLength: 40,
               decoration: const InputDecoration(
                 labelText: 'Work (Job Title/Company)',
@@ -369,6 +436,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _eduController,
+              textCapitalization: TextCapitalization.words, 
               maxLength: 40,
               decoration: const InputDecoration(
                 labelText: 'Education',

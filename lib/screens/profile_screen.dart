@@ -18,7 +18,7 @@ class ProfileData {
   final String? education;
   final List<String> images; 
   final String? expectations;
-  final String? currentDateBid; // <--- PROPERLY ADDED HERE
+  final String? currentDateBid; 
   final List<String> interests; 
 
   ProfileData({
@@ -32,7 +32,7 @@ class ProfileData {
     this.education,
     required this.images,
     this.expectations,
-    this.currentDateBid, // <--- PROPERLY ADDED HERE
+    this.currentDateBid, 
     required this.interests,
   });
 
@@ -66,7 +66,7 @@ class ProfileData {
       education: json['education'],
       images: json['images'] != null ? List<String>.from(json['images']) : [],
       expectations: json['expectations'],
-      currentDateBid: json['current_date_bid'], // <--- PROPERLY PARSED HERE
+      currentDateBid: json['current_date_bid'], 
       interests: parsedInterests,
     );
   }
@@ -192,37 +192,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     '${profile.firstName}, ${profile.age}',
                     style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
+                  const SizedBox(height: 12),
+                  // THIS IS THE NEW WRAP WIDGET FOR INFO
+                  Wrap(
+                    spacing: 16.0, 
+                    runSpacing: 8.0, 
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(profile.location, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(profile.location, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                        ],
+                      ),
+                      if (profile.work != null && profile.work!.isNotEmpty)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.work, size: 16, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(profile.work!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                          ],
+                        ),
+                      if (profile.education != null && profile.education!.isNotEmpty)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.school, size: 16, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(profile.education!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+                          ],
+                        ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  if (profile.work != null && profile.work!.isNotEmpty)
-                    Row(
-                      children: [
-                        const Icon(Icons.work, size: 16, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(profile.work!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                      ],
-                    ),
-                  const SizedBox(height: 8),
-                  if (profile.education != null && profile.education!.isNotEmpty)
-                    Row(
-                      children: [
-                        const Icon(Icons.school, size: 16, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Text(profile.education!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                      ],
-                    ),
                 ],
               ),
             ),
 
-            // --- SHOW THE USER THEIR OWN DATE BID ---
             if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
