@@ -34,8 +34,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Icon _getIconForType(String type, ColorScheme colorScheme) {
     switch (type) {
-      case 'like': return const Icon(Icons.favorite, color: AppTheme.hotPink);
-      case 'match': return const Icon(Icons.auto_awesome, color: AppTheme.skySurge);
+      case 'like': return const Icon(Icons.favorite, color: AppTheme.primaryRose);
+      case 'match': return const Icon(Icons.auto_awesome, color: AppTheme.electricCyan);
       default: return Icon(Icons.info, color: colorScheme.primary);
     }
   }
@@ -51,7 +51,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         backgroundColor: colorScheme.surface,
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: colorScheme.primary))
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.electricCyan))
           : _notifications.isEmpty
               ? _buildEmptyState(colorScheme)
               : ListView.separated(

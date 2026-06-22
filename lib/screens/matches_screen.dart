@@ -57,11 +57,10 @@ class _MatchesScreenState extends State<MatchesScreen> {
             icon: Icon(Icons.notifications_none, color: colorScheme.onSurface),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
           ),
-          IconButton(icon: Icon(Icons.shield, color: colorScheme.onSurface.withValues(alpha: 0.5)), onPressed: () {}),
         ],
       ),
       body: _isLoading 
-        ? Center(child: CircularProgressIndicator(color: AppTheme.hotPink)) // Branded loader
+        ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryRose))
         : _matches.isEmpty 
           ? _buildEmptyState(colorScheme)
           : _buildInbox(colorScheme),
@@ -89,7 +88,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-          child: Text('New Alignments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.hotPink)), // Neon pink text
+          child: Text('New Alignments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryRose)), 
         ),
         SizedBox(
           height: 110,
@@ -109,7 +108,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.hotPink, width: 2), // Neon pink ring!
+                        border: Border.all(color: AppTheme.primaryRose, width: 2), 
                       ),
                       child: CircleAvatar(radius: 35, backgroundImage: NetworkImage(imageUrl)),
                     ),

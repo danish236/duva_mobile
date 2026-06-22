@@ -19,7 +19,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final Dio dio = Dio();
-  
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
   
   List<dynamic> _messages = [];
@@ -31,10 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _myUserId = Supabase.instance.client.auth.currentUser?.id;
     _fetchMessages();
-    
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      _fetchMessages(isPolling: true);
-    });
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages(isPolling: true));
   }
 
   @override
@@ -54,26 +50,19 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final options = await _getSecureOptions();
       final response = await dio.get('$apiUrl/messages/${widget.matchId}', options: options);
-      
       if (mounted) {
         setState(() => _messages = response.data);
-        if (!isPolling && _messages.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-        }
+        if (!isPolling && _messages.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       }
-    } catch (e) { debugPrint("Polling error (ignored): $e"); }
+    } catch (e) { debugPrint("Polling error: $e"); }
   }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-
-    setState(() {
-      _messages.add({'sender_id': _myUserId, 'content': text, 'created_at': DateTime.now().toIso8601String()});
-    });
+    setState(() => _messages.add({'sender_id': _myUserId, 'content': text, 'created_at': DateTime.now().toIso8601String()}));
     _messageController.clear();
     _scrollToBottom();
-
     try {
       final options = await _getSecureOptions();
       await dio.post('$apiUrl/messages/${widget.matchId}', data: {'content': text}, options: options);
@@ -83,9 +72,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(_scrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
-    }
+    if (_scrollController.hasClients) _scrollController.animateTo(_scrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   @override
@@ -116,7 +103,6 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isMe = msg['sender_id'] == _myUserId;
-
                 return Align(
                   alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
@@ -124,13 +110,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     margin: const EdgeInsets.only(bottom: 8), 
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      // Hot Pink bubbles for user, surface color for matches!
-                      color: isMe ? AppTheme.hotPink : colorScheme.surface,
+                      color: isMe ? AppTheme.primaryRose : colorScheme.surface,
                       borderRadius: BorderRadius.circular(20).copyWith(
                         bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(20),
                         bottomLeft: !isMe ? const Radius.circular(0) : const Radius.circular(20),
                       ),
-                      boxShadow: [BoxShadow(color: colorScheme.onSurface.withValues(alpha: 0.05), blurRadius: 5)],
                     ),
                     child: Text(msg['content'], style: TextStyle(color: isMe ? Colors.white : colorScheme.onSurface, fontSize: 16)),
                   ),
@@ -161,12 +145,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   fillColor: colorScheme.background,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
-                textCapitalization: TextCapitalization.sentences,
               ),
             ),
             const SizedBox(width: 8),
             CircleAvatar(
-              backgroundColor: AppTheme.skySurge,
+              backgroundColor: AppTheme.electricCyan,
               radius: 24,
               child: IconButton(icon: const Icon(Icons.send, color: Colors.white), onPressed: _sendMessage),
             ),

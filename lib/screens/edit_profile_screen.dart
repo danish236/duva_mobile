@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'profile_screen.dart';
 import '../theme.dart';
@@ -20,14 +23,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _workController = TextEditingController();
   final _locationController = TextEditingController();
   final _dateBidController = TextEditingController();
+  final _weightController = TextEditingController();
 
   String? _selectedGender;
   String? _selectedExpectation;
   String? _selectedEducation;
+  
+  // New Lifestyle State
+  String? _selectedHeight;
+  String? _selectedSmoking;
+  String? _selectedDrinking;
+  String? _selectedWorkout;
+  String? _selectedPets;
+  String? _selectedZodiac;
+  String? _selectedKids;
 
   List<String> _masterGenders = [];
   List<String> _masterExpectations = [];
   List<String> _masterEducation = [];
+  List<Map<String, dynamic>> _masterInterests = [];
+
+  List<dynamic> _currentImages = [];
+  List<int> _selectedInterestIds = [];
+
+  // Static standard lists for lifestyle
+  final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\""); // 4'0" to 7'11"
+  final List<String> _smokingOptions = ['Never', 'Socially', 'Regularly', 'Trying to quit'];
+  final List<String> _drinkingOptions = ['Never', 'Socially', 'Regularly'];
+  final List<String> _workoutOptions = ['Everyday', 'Sometimes', 'Never'];
+  final List<String> _petsOptions = ['Dog', 'Cat', 'Both', 'None', 'Want them'];
+  final List<String> _zodiacOptions = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'];
+  final List<String> _kidsOptions = ['Want someday', 'Don\'t want', 'Have & want more', 'Have & don\'t want more'];
 
   @override
   void initState() {
@@ -36,42 +62,86 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _workController.text = widget.currentProfile.work ?? '';
     _locationController.text = widget.currentProfile.location;
     _dateBidController.text = widget.currentProfile.currentDateBid ?? '';
+    _weightController.text = widget.currentProfile.weight ?? '';
+    
+    _selectedHeight = widget.currentProfile.height;
+    _selectedSmoking = widget.currentProfile.smoking;
+    _selectedDrinking = widget.currentProfile.drinking;
+    _selectedWorkout = widget.currentProfile.workout;
+    _selectedPets = widget.currentProfile.pets;
+    _selectedZodiac = widget.currentProfile.zodiac;
+    _selectedKids = widget.currentProfile.kids;
+    
+    _currentImages = List<dynamic>.from(widget.currentProfile.images);
     _fetchMasterData();
   }
 
   Future<void> _fetchMasterData() async {
     final client = Supabase.instance.client;
-    final results = await Future.wait([
-      client.from('master_genders').select('name').order('id'),
-      client.from('master_expectations').select('name').order('id'),
-      client.from('master_education').select('name').order('id'),
-    ]);
+    try {
+      final results = await Future.wait([
+        client.from('master_genders').select('name').order('id'),
+        client.from('master_expectations').select('name').order('id'),
+        client.from('master_education').select('name').order('id'),
+        client.from('master_interests').select('id, name').order('id'),
+      ]);
 
-    if (mounted) {
-      setState(() {
-        _masterGenders = (results[0] as List).map((e) => e['name'] as String).toList();
-        _masterExpectations = (results[1] as List).map((e) => e['name'] as String).toList();
-        _masterEducation = (results[2] as List).map((e) => e['name'] as String).toList();
-        
-        // Safety checks for initial dropdown values
-        if (_masterExpectations.contains(widget.currentProfile.expectations)) {
-          _selectedExpectation = widget.currentProfile.expectations;
-        }
-        if (_masterEducation.contains(widget.currentProfile.education)) {
-          _selectedEducation = widget.currentProfile.education;
-        }
+      if (mounted) {
+        setState(() {
+          _masterGenders = (results[0] as List).map((e) => e['name'] as String).toList();
+          _masterExpectations = (results[1] as List).map((e) => e['name'] as String).toList();
+          _masterEducation = (results[2] as List).map((e) => e['name'] as String).toList();
+          _masterInterests = List<Map<String, dynamic>>.from(results[3]);
+          
+          if (_masterExpectations.contains(widget.currentProfile.expectations)) _selectedExpectation = widget.currentProfile.expectations;
+          if (_masterEducation.contains(widget.currentProfile.education)) _selectedEducation = widget.currentProfile.education;
 
-        _isLoadingData = false;
-      });
+          for (String interestName in widget.currentProfile.interests) {
+            final match = _masterInterests.firstWhere((m) => m['name'] == interestName, orElse: () => {});
+            if (match.isNotEmpty) _selectedInterestIds.add(match['id']);
+          }
+
+          _isLoadingData = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingData = false);
     }
+  }
+
+  Future<void> _pickImage() async {
+    if (_currentImages.length >= 6) return;
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    if (pickedFile != null) setState(() => _currentImages.add(File(pickedFile.path)));
   }
 
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_currentImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must have at least one profile photo.')));
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
+      List<String> finalImageUrls = [];
+
+      for (int i = 0; i < _currentImages.length; i++) {
+        final img = _currentImages[i];
+        if (img is String) {
+          finalImageUrls.add(img);
+        } else if (img is File) {
+          final fileExt = img.path.split('.').last;
+          final fileName = '${userId}_${DateTime.now().millisecondsSinceEpoch}_$i.$fileExt';
+          await Supabase.instance.client.storage.from('avatars').upload(fileName, img);
+          final publicUrl = Supabase.instance.client.storage.from('avatars').getPublicUrl(fileName);
+          finalImageUrls.add(publicUrl);
+        }
+      }
+
       await Supabase.instance.client.from('profiles').update({
         'bio': _bioController.text.trim(),
         'work': _workController.text.trim(),
@@ -80,32 +150,160 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'location': _locationController.text.trim(),
         'current_date_bid': _dateBidController.text.trim(),
         'gender': _selectedGender,
+        'images': finalImageUrls,
+        'height': _selectedHeight,
+        'weight': _weightController.text.trim(),
+        'smoking': _selectedSmoking,
+        'drinking': _selectedDrinking,
+        'workout': _selectedWorkout,
+        'pets': _selectedPets,
+        'zodiac': _selectedZodiac,
+        'kids': _selectedKids,
       }).eq('id', userId);
+
+      // FIX: Ensure unique IDs before insert to avoid duplicate constraint error
+      final uniqueInterests = _selectedInterestIds.toSet().toList();
+      
+      await Supabase.instance.client.from('profile_interests').delete().eq('profile_id', userId);
+      
+      if (uniqueInterests.isNotEmpty) {
+        List<Map<String, dynamic>> interestInserts = uniqueInterests.map((id) => {
+          'profile_id': userId,
+          'interest_id': id
+        }).toList();
+        await Supabase.instance.client.from('profile_interests').insert(interestInserts);
+      }
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update profile.')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
+  void _showSinglePicker(String title, List<String> options, String? currentValue, Function(String) onSelect) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.6,
+              padding: const EdgeInsets.only(top: 24, bottom: 40),
+              decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.9)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: ListView(
+                      children: options.map((option) {
+                        final isSelected = option == currentValue;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+                          title: Text(option, style: TextStyle(color: isSelected ? AppTheme.electricCyan : Colors.white, fontSize: 18, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.electricCyan) : null,
+                          onTap: () { onSelect(option); Navigator.pop(context); },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    );
+  }
+
+  void _showInterestsPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  padding: const EdgeInsets.only(top: 24, bottom: 40, left: 24, right: 24),
+                  decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.9)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('YOUR INTERESTS', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                          IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Select up to 5 interests.', style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8))),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 10, runSpacing: 10,
+                            children: _masterInterests.map((interest) {
+                              final isSelected = _selectedInterestIds.contains(interest['id']);
+                              return GestureDetector(
+                                onTap: () {
+                                  setModalState(() {
+                                    if (isSelected) {
+                                      _selectedInterestIds.remove(interest['id']);
+                                    } else if (_selectedInterestIds.length < 5) {
+                                      _selectedInterestIds.add(interest['id']);
+                                    }
+                                  });
+                                  setState(() {}); 
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? AppTheme.electricCyan.withValues(alpha: 0.2) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: isSelected ? AppTheme.electricCyan : Colors.white12),
+                                  ),
+                                  child: Text(interest['name'], style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? AppTheme.electricCyan : AppTheme.textSecondary)),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    if (_isLoadingData) {
-      return Scaffold(
-        backgroundColor: colorScheme.background, 
-        body: Center(child: CircularProgressIndicator(color: AppTheme.hotPink))
-      );
-    }
+    if (_isLoadingData) return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppTheme.primaryRose)));
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
       appBar: AppBar(
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white), onPressed: () => Navigator.pop(context)),
         title: ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.skySurge, AppTheme.hotPink]).createShader(bounds),
+          shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
           child: const Text('EDIT PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.2, color: Colors.white)),
         ),
       ),
@@ -114,29 +312,112 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            _buildSectionLabel('YOUR DATE BID', colorScheme),
-            _buildTextField(_dateBidController, 'Active Date Bid 🥂', 'e.g., Coffee at 4PM'),
+            _buildSectionLabel('YOUR PHOTOS'),
+            const SizedBox(height: 8),
+            GridView.builder(
+              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.75),
+              itemCount: 6,
+              itemBuilder: (context, index) {
+                if (index < _currentImages.length) {
+                  final img = _currentImages[index];
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16), 
+                        child: img is String ? Image.network(img, fit: BoxFit.cover) : Image.file(img as File, fit: BoxFit.cover)
+                      ),
+                      Positioned(
+                        top: 4, right: 4,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _currentImages.removeAt(index)),
+                          child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: AppTheme.voidBackground.withValues(alpha: 0.8), shape: BoxShape.circle), child: const Icon(Icons.close, color: AppTheme.primaryRose, size: 16)),
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  return GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.electricCyan.withValues(alpha: 0.3), width: 2, style: BorderStyle.solid)), child: const Center(child: Icon(Icons.add, color: AppTheme.electricCyan, size: 32))),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 32),
+
+            _buildSectionLabel('YOUR DATE BID'),
+            _buildTextField(_dateBidController, 'Active Date Bid', 'e.g., Coffee at 4PM', maxLength: 60),
             const SizedBox(height: 24),
             
-            _buildSectionLabel('PERSONAL INFO', colorScheme),
-            _buildDropdown('Gender', _masterGenders, _selectedGender, (val) => setState(() => _selectedGender = val), colorScheme),
+            _buildSectionLabel('PERSONAL INFO'),
+            _buildSelector('Gender', _selectedGender ?? 'Select', () => _showSinglePicker('Select Gender', _masterGenders, _selectedGender, (val) => setState(() => _selectedGender = val))),
             const SizedBox(height: 16),
-            _buildDropdown('Expectations', _masterExpectations, _selectedExpectation, (val) => setState(() => _selectedExpectation = val), colorScheme),
+            _buildSelector('Expectations', _selectedExpectation ?? 'Select', () => _showSinglePicker('Looking For', _masterExpectations, _selectedExpectation, (val) => setState(() => _selectedExpectation = val))),
             const SizedBox(height: 16),
-            _buildDropdown('Education', _masterEducation, _selectedEducation, (val) => setState(() => _selectedEducation = val), colorScheme),
+            _buildSelector('Education', _selectedEducation ?? 'Select', () => _showSinglePicker('Education', _masterEducation, _selectedEducation, (val) => setState(() => _selectedEducation = val))),
             const SizedBox(height: 16),
-            _buildTextField(_workController, 'Work', 'Job Title / Company'),
-            const SizedBox(height: 24),
+            _buildTextField(_workController, 'Work', 'Job Title / Company', maxLength: 50),
+            const SizedBox(height: 32),
 
-            _buildSectionLabel('ABOUT YOU', colorScheme),
-            _buildTextField(_bioController, 'Bio', 'A little bit about me...', maxLines: 4),
+            // LIFESTYLE SECTION
+            _buildSectionLabel('LIFESTYLE'),
+            Row(
+              children: [
+                Expanded(child: _buildSelector('Height', _selectedHeight ?? 'Select', () => _showSinglePicker('Height', _heightOptions, _selectedHeight, (val) => setState(() => _selectedHeight = val)))),
+                const SizedBox(width: 16),
+                Expanded(child: _buildTextField(_weightController, 'Weight', 'e.g. 70', keyboardType: TextInputType.number, suffixText: 'kg')),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildSelector('Workout', _selectedWorkout ?? 'Select', () => _showSinglePicker('Workout', _workoutOptions, _selectedWorkout, (val) => setState(() => _selectedWorkout = val))),
+            const SizedBox(height: 16),
+            _buildSelector('Smoking', _selectedSmoking ?? 'Select', () => _showSinglePicker('Smoking', _smokingOptions, _selectedSmoking, (val) => setState(() => _selectedSmoking = val))),
+            const SizedBox(height: 16),
+            _buildSelector('Drinking', _selectedDrinking ?? 'Select', () => _showSinglePicker('Drinking', _drinkingOptions, _selectedDrinking, (val) => setState(() => _selectedDrinking = val))),
+            const SizedBox(height: 16),
+            _buildSelector('Pets', _selectedPets ?? 'Select', () => _showSinglePicker('Pets', _petsOptions, _selectedPets, (val) => setState(() => _selectedPets = val))),
+            const SizedBox(height: 16),
+            _buildSelector('Zodiac', _selectedZodiac ?? 'Select', () => _showSinglePicker('Zodiac', _zodiacOptions, _selectedZodiac, (val) => setState(() => _selectedZodiac = val))),
+            const SizedBox(height: 16),
+            _buildSelector('Kids', _selectedKids ?? 'Select', () => _showSinglePicker('Kids', _kidsOptions, _selectedKids, (val) => setState(() => _selectedKids = val))),
+            const SizedBox(height: 32),
+
+            _buildSectionLabel('INTERESTS'),
+            if (_selectedInterestIds.isNotEmpty)
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: _selectedInterestIds.map((id) {
+                  final name = _masterInterests.firstWhere((m) => m['id'] == id)['name'];
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(color: AppTheme.electricCyan.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppTheme.electricCyan)),
+                    child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.electricCyan)),
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: _showInterestsPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white12)),
+                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.edit, color: AppTheme.textSecondary, size: 18), SizedBox(width: 8), Text('EDIT INTERESTS', style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w900, letterSpacing: 1.5))]),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            _buildSectionLabel('ABOUT YOU'),
+            _buildTextField(_bioController, 'Bio', 'A little bit about me...', maxLines: 4, maxLength: 300),
             
             const SizedBox(height: 48),
             SizedBox(
-              width: double.infinity,
+              width: double.infinity, height: 60,
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _saveChanges,
-                child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('SAVE CHANGES'),
+                style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
               ),
             ),
             const SizedBox(height: 40),
@@ -146,36 +427,53 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildSectionLabel(String text, ColorScheme colorScheme) {
+  Widget _buildSectionLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0, left: 4.0),
-      child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+      child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white.withValues(alpha: 0.4))),
     );
   }
 
-  Widget _buildDropdown(String label, List<String> items, String? value, Function(String?) onChanged, ColorScheme colorScheme) {
-    return DropdownButtonFormField<String>(
-      decoration: InputDecoration(
-        labelText: label, 
-        filled: true,
-        fillColor: colorScheme.surface,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+  Widget _buildSelector(String label, String value, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white12)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Icon(Icons.chevron_right, color: AppTheme.electricCyan),
+          ],
+        ),
       ),
-      icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.skySurge),
-      dropdownColor: colorScheme.surface,
-      value: value,
-      items: items.map((i) => DropdownMenuItem(value: i, child: Text(i, style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold)))).toList(),
-      onChanged: onChanged,
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, String hint, {int maxLines = 1}) {
+  Widget _buildTextField(TextEditingController controller, String label, String hint, {int maxLines = 1, int? maxLength, TextInputType? keyboardType, String? suffixText}) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
+      maxLength: maxLength,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
       decoration: InputDecoration(
         labelText: label, 
         hintText: hint,
+        filled: true,
+        fillColor: AppTheme.surfaceGlass,
+        suffixText: suffixText,
+        suffixStyle: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        counterStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontWeight: FontWeight.bold, fontSize: 12),
       ),
     );
   }
