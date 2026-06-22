@@ -8,63 +8,51 @@ class AppTheme {
   static const Color whiteSmoke = Color(0xFFF0F6F6);
   static const Color hotPink = Color(0xFFFF66B3);
 
-  // Dark Mode specific background colors
-  static const Color darkBackground = Color(0xFF0B1320); // Deep midnight blue
-  static const Color darkSurface = Color(0xFF142538);    // Slightly lighter card blue
+  // Deepened the Dark Mode background for MAXIMUM neon contrast
+  static const Color voidBackground = Color(0xFF020B14); 
+  static const Color cardSurface = Color(0xFF051726);
 
   // --- LIGHT THEME ---
   static ThemeData get lightTheme {
     return ThemeData(
       brightness: Brightness.light,
-      primaryColor: skySurge,
+      useMaterial3: true,
       scaffoldBackgroundColor: whiteSmoke,
-      fontFamily: 'Inter', // Default to a clean modern font if you add it later
-      
+      primaryColor: skySurge,
       colorScheme: const ColorScheme.light(
         primary: skySurge,
         secondary: hotPink,
-        tertiary: duskBlue,
+        tertiary: frozenWater,
         surface: Colors.white,
         background: whiteSmoke,
         onPrimary: Colors.white,
-        onSecondary: Colors.white,
-        onSurface: duskBlue, // Text on cards will be dusk blue for a softer look than black
+        onSurface: duskBlue,
         onBackground: duskBlue,
       ),
-
       appBarTheme: const AppBarTheme(
-        backgroundColor: whiteSmoke,
+        backgroundColor: Colors.transparent, // Floating app bar look
+        foregroundColor: duskBlue,
         elevation: 0,
         centerTitle: true,
-        iconTheme: IconThemeData(color: duskBlue),
-        titleTextStyle: TextStyle(color: duskBlue, fontSize: 20, fontWeight: FontWeight.bold),
+        titleTextStyle: TextStyle(color: duskBlue, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5),
       ),
-
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: skySurge,
+          backgroundColor: hotPink,
           foregroundColor: Colors.white,
-          elevation: 4,
-          shadowColor: skySurge.withValues(alpha: 0.4),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          elevation: 10,
+          shadowColor: hotPink.withValues(alpha: 0.6), // Punchy Pink Glow
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 1.2),
         ),
       ),
-
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: skySurge, width: 2)),
-        labelStyle: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
-      ),
-      
-      chipTheme: ChipThemeData(
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: Colors.white,
-        selectedColor: frozenWater,
-        labelStyle: const TextStyle(color: duskBlue, fontWeight: FontWeight.bold),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey[300]!)),
+        selectedItemColor: hotPink,
+        unselectedItemColor: frozenWater,
+        elevation: 20,
+        type: BottomNavigationBarType.fixed,
       ),
     );
   }
@@ -73,54 +61,43 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
+      useMaterial3: true,
+      scaffoldBackgroundColor: voidBackground,
       primaryColor: skySurge,
-      scaffoldBackgroundColor: darkBackground,
-      
       colorScheme: const ColorScheme.dark(
         primary: skySurge,
         secondary: hotPink,
         tertiary: frozenWater,
-        surface: darkSurface,
-        background: darkBackground,
+        surface: cardSurface,
+        background: voidBackground,
         onPrimary: Colors.white,
-        onSecondary: Colors.white,
-        onSurface: whiteSmoke, // Light text on dark cards
+        onSurface: Colors.white,
         onBackground: whiteSmoke,
       ),
-
       appBarTheme: const AppBarTheme(
-        backgroundColor: darkBackground,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        iconTheme: IconThemeData(color: whiteSmoke),
-        titleTextStyle: TextStyle(color: whiteSmoke, fontSize: 20, fontWeight: FontWeight.bold),
+        titleTextStyle: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5),
       ),
-
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: skySurge,
-          foregroundColor: Colors.white,
-          elevation: 4,
-          shadowColor: skySurge.withValues(alpha: 0.4),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          foregroundColor: voidBackground, // Dark text on bright button
+          elevation: 15,
+          shadowColor: skySurge.withValues(alpha: 0.8), // Punchy Cyan Glow
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.2),
         ),
       ),
-
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: darkSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: skySurge, width: 2)),
-        labelStyle: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
-      ),
-      
-      chipTheme: ChipThemeData(
-        backgroundColor: darkSurface,
-        selectedColor: skySurge.withValues(alpha: 0.3),
-        labelStyle: const TextStyle(color: whiteSmoke, fontWeight: FontWeight.bold),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: cardSurface,
+        selectedItemColor: hotPink,
+        unselectedItemColor: duskBlue,
+        elevation: 20,
+        type: BottomNavigationBarType.fixed,
       ),
     );
   }

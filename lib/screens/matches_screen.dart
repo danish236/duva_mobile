@@ -27,9 +27,17 @@ class _MatchesScreenState extends State<MatchesScreen> {
   Future<void> _fetchMatches() async {
     try {
       final session = Supabase.instance.client.auth.currentSession;
-      final response = await dio.get('$apiUrl/matches', options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}));
-      if (mounted) setState(() { _matches = response.data; _isLoading = false; });
+      final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
+      final response = await dio.get('$apiUrl/matches', options: options);
+      
+      if (mounted) {
+        setState(() {
+          _matches = response.data;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
+      debugPrint("Error fetching matches: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -41,17 +49,19 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return Scaffold(
       backgroundColor: colorScheme.background,
       appBar: AppBar(
-        title: const Text('Matches', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        title: Text('Matches', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: colorScheme.onSurface)),
         backgroundColor: colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
         elevation: 0,
         actions: [
-          IconButton(icon: Icon(Icons.notifications_none, color: colorScheme.onSurface), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()))),
+          IconButton(
+            icon: Icon(Icons.notifications_none, color: colorScheme.onSurface),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
+          ),
           IconButton(icon: Icon(Icons.shield, color: colorScheme.onSurface.withValues(alpha: 0.5)), onPressed: () {}),
         ],
       ),
       body: _isLoading 
-        ? Center(child: CircularProgressIndicator(color: colorScheme.primary))
+        ? Center(child: CircularProgressIndicator(color: AppTheme.hotPink)) // Branded loader
         : _matches.isEmpty 
           ? _buildEmptyState(colorScheme)
           : _buildInbox(colorScheme),
@@ -77,9 +87,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-          child: Text('New Alignments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.hotPink)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+          child: Text('New Alignments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.hotPink)), // Neon pink text
         ),
         SizedBox(
           height: 110,
@@ -90,13 +100,17 @@ class _MatchesScreenState extends State<MatchesScreen> {
             itemBuilder: (context, index) {
               final match = _matches[index];
               final String imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : 'https://via.placeholder.com/150';
+
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Column(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppTheme.hotPink, width: 2)),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.hotPink, width: 2), // Neon pink ring!
+                      ),
                       child: CircleAvatar(radius: 35, backgroundImage: NetworkImage(imageUrl)),
                     ),
                     const SizedBox(height: 6),
@@ -107,7 +121,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
             },
           ),
         ),
-        const Divider(height: 1),
+
+        Divider(height: 1, color: colorScheme.onSurface.withValues(alpha: 0.1)),
+
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
           child: Text('Messages', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
@@ -118,13 +134,23 @@ class _MatchesScreenState extends State<MatchesScreen> {
             itemBuilder: (context, index) {
               final match = _matches[index];
               final String imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : 'https://via.placeholder.com/150';
+
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 leading: CircleAvatar(radius: 28, backgroundImage: NetworkImage(imageUrl)),
                 title: Text(match['firstName'] ?? match['first_name'] ?? 'Match', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
                 subtitle: Text('Matched recently! Say hi.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(matchId: match['id'], matchName: match['firstName'] ?? match['first_name'] ?? 'Match', matchImage: imageUrl)));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        matchId: match['id'],
+                        matchName: match['firstName'] ?? match['first_name'] ?? 'Match',
+                        matchImage: imageUrl,
+                      ),
+                    ),
+                  );
                 },
               );
             },

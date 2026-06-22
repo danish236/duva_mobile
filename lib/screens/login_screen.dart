@@ -5,7 +5,6 @@ import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -19,10 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+      await Supabase.instance.client.auth.signInWithPassword(email: _emailController.text.trim(), password: _passwordController.text.trim());
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
@@ -35,7 +31,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      // Background color is now handled by the global theme!
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -45,16 +40,16 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const Icon(Icons.favorite_rounded, size: 64, color: AppTheme.hotPink),
               const SizedBox(height: 24),
-              Text('Welcome to Duva', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
-              const SizedBox(height: 40), 
               
-              TextField(
-                controller: _emailController, 
-                keyboardType: TextInputType.emailAddress, 
-                decoration: const InputDecoration(labelText: 'Email') // Styling is handled by theme.dart
+              // Gradient Text Title!
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.hotPink, AppTheme.skySurge]).createShader(bounds),
+                child: const Text('Welcome to Duva', textAlign: TextAlign.center, style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white)),
               ),
-              const SizedBox(height: 16),
               
+              const SizedBox(height: 40), 
+              TextField(controller: _emailController, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+              const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
@@ -67,20 +62,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              
-              SizedBox(
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _signIn,
-                  child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Login'),
-                ),
-              ),
+              SizedBox(height: 54, child: ElevatedButton(onPressed: _isLoading ? null : _signIn, child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Login'))),
               const SizedBox(height: 16),
-              
-              TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                child: const Text('Don\'t have an account? Register', style: TextStyle(color: AppTheme.skySurge, fontWeight: FontWeight.w600)),
-              ),
+              TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())), child: const Text('Don\'t have an account? Register', style: TextStyle(color: AppTheme.skySurge, fontWeight: FontWeight.w600))),
             ],
           ),
         ),

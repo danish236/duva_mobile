@@ -131,11 +131,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (_isLoading) return Scaffold(body: Center(child: CircularProgressIndicator(color: colorScheme.primary)));
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: colorScheme.background,
+        body: Center(child: CircularProgressIndicator(color: AppTheme.hotPink))
+      );
+    }
 
     if (_errorMessage != null || _myProfile == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('My Profile')),
+        backgroundColor: colorScheme.background,
+        appBar: AppBar(title: const Text('MY PROFILE', style: TextStyle(fontWeight: FontWeight.w900))),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -152,11 +158,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = _myProfile!;
 
     return Scaffold(
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        title: const Text('My Profile'),
+        title: ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.skySurge, AppTheme.hotPink]).createShader(bounds),
+          child: const Text('MY PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, letterSpacing: 1.5, color: Colors.white)),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_note),
+            icon: Icon(Icons.edit_note, color: colorScheme.onSurface),
             onPressed: () async {
               final didUpdate = await Navigator.push(
                 context,
@@ -169,11 +179,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_none),
+            icon: Icon(Icons.notifications_none, color: colorScheme.onSurface),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
           ),
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: Icon(Icons.settings, color: colorScheme.onSurface),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
           ),
         ],
@@ -182,47 +192,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0]),
+            if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0], colorScheme),
 
-            _buildInfoCard(
+            _buildPunchyInfoCard(
               colorScheme: colorScheme,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '${profile.firstName}, ${profile.age}',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: colorScheme.onSurface, letterSpacing: -0.5),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 16.0, 
-                    runSpacing: 8.0, 
+                    runSpacing: 12.0, 
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.location_on, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
-                          const SizedBox(width: 4),
-                          Text(profile.location, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
+                          const Icon(Icons.location_on, size: 18, color: AppTheme.skySurge),
+                          const SizedBox(width: 6),
+                          Text(profile.location, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.w600)),
                         ],
                       ),
                       if (profile.work != null && profile.work!.isNotEmpty)
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.work, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
-                            const SizedBox(width: 4),
-                            Text(profile.work!, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
+                            const Icon(Icons.work, size: 18, color: AppTheme.hotPink),
+                            const SizedBox(width: 6),
+                            Text(profile.work!, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       if (profile.education != null && profile.education!.isNotEmpty)
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.school, size: 16, color: colorScheme.onSurface.withValues(alpha: 0.6)),
-                            const SizedBox(width: 4),
-                            Text(profile.education!, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
+                            const Icon(Icons.school, size: 18, color: AppTheme.frozenWater),
+                            const SizedBox(width: 6),
+                            Text(profile.education!, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.w600)),
                           ],
                         ),
                     ],
@@ -233,7 +243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 padding: const EdgeInsets.all(20.0),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
@@ -241,53 +251,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: AppTheme.hotPink.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: AppTheme.hotPink.withValues(alpha: 0.4), blurRadius: 15, offset: const Offset(0, 8))],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.local_activity, color: Colors.white, size: 20),
+                        Icon(Icons.local_fire_department, color: Colors.white, size: 22),
                         SizedBox(width: 8),
-                        Text('MY ACTIVE DATE BID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.2, fontSize: 12)),
+                        Text('MY ACTIVE DATE BID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 13)),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Text(
                       profile.currentDateBid!,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, height: 1.3),
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.4),
                     ),
                   ],
                 ),
               ),
 
             if (profile.bio != null && profile.bio!.isNotEmpty)
-              _buildPromptCard('A bit about me...', profile.bio!, colorScheme),
+              _buildPunchyPromptCard('ABOUT ME', profile.bio!, colorScheme),
 
-            if (profile.images.length > 1) _buildFullWidthImage(profile.images[1]),
+            if (profile.images.length > 1) _buildFullWidthImage(profile.images[1], colorScheme),
 
             if (profile.expectations != null && profile.expectations!.isNotEmpty)
-              _buildPromptCard('What I am looking for', profile.expectations!, colorScheme),
+              _buildPunchyPromptCard('LOOKING FOR', profile.expectations!, colorScheme),
 
             if (profile.interests.isNotEmpty)
-              _buildInfoCard(
-                colorScheme: colorScheme,
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                padding: const EdgeInsets.all(24.0),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 5))],
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Interests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.6))),
-                    const SizedBox(height: 12),
+                    Text('INTERESTS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+                    const SizedBox(height: 16),
                     Wrap(
-                      spacing: 8.0, 
-                      runSpacing: 8.0, 
+                      spacing: 10.0, 
+                      runSpacing: 10.0, 
                       children: profile.interests.map((interest) {
-                        return Chip(
-                          label: Text(interest),
-                          backgroundColor: colorScheme.background,
-                          side: BorderSide.none,
-                          labelStyle: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w500),
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: colorScheme.background.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: colorScheme.onSurface.withValues(alpha: 0.1))
+                          ),
+                          child: Text(
+                            interest,
+                            style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
                         );
                       }).toList(),
                     ),
@@ -295,7 +317,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            if (profile.images.length > 2) _buildFullWidthImage(profile.images[2]),
+            if (profile.images.length > 2) _buildFullWidthImage(profile.images[2], colorScheme),
             const SizedBox(height: 40), 
           ],
         ),
@@ -303,55 +325,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildFullWidthImage(String imageUrl) {
+  Widget _buildFullWidthImage(String imageUrl, ColorScheme colorScheme) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      margin: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.network(
-        imageUrl, height: 400, fit: BoxFit.cover,
+        imageUrl, height: 450, fit: BoxFit.cover,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
-          return const SizedBox(height: 400, child: Center(child: CircularProgressIndicator()));
+          return SizedBox(height: 450, child: Center(child: CircularProgressIndicator(color: AppTheme.skySurge)));
         },
         errorBuilder: (context, error, stackTrace) {
-          return Container(height: 400, color: Colors.grey[300], child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)));
+          return Container(height: 450, color: colorScheme.surface, child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey)));
         },
       ),
     );
   }
 
-  Widget _buildInfoCard({required Widget child, required ColorScheme colorScheme}) {
+  Widget _buildPunchyInfoCard({required Widget child, required ColorScheme colorScheme}) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      padding: const EdgeInsets.all(20.0),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.all(24.0),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: child,
     );
   }
 
-  Widget _buildPromptCard(String promptTitle, String promptAnswer, ColorScheme colorScheme) {
+  Widget _buildPunchyPromptCard(String promptTitle, String promptAnswer, ColorScheme colorScheme) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      padding: const EdgeInsets.all(20.0),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.all(24.0),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5, offset: const Offset(0, 2))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 5))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(promptTitle, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: colorScheme.onSurface.withValues(alpha: 0.6))),
-          const SizedBox(height: 8),
-          Text(promptAnswer, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.3, color: colorScheme.onSurface)),
+          Text(promptTitle, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: colorScheme.onSurface.withValues(alpha: 0.5))),
+          const SizedBox(height: 12),
+          Text(promptAnswer, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.4, color: colorScheme.onSurface)),
         ],
       ),
     );

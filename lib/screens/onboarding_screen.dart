@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide MultipartFile;
-import 'package:dio/dio.dart';
-import 'package:path/path.dart' as p;
-import 'profile_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import '../main.dart'; // To navigate to MainLayout upon completion
+import '../theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -18,36 +19,58 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentPage = 0;
   bool _isLoading = false;
 
-  // Form Data - Text
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _bioController = TextEditingController();
-  final TextEditingController _workController = TextEditingController();
-
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _bioController = TextEditingController();
+  final _workController = TextEditingController();
   DateTime? _selectedDate;
 
-  // Form Data - Selections (Populated from Master Tables)
-  String? _selectedGender;
-  String? _selectedLookingForGender;
-  String? _selectedExpectation;
-  String? _selectedEducation;
-  final List<int> _selectedInterestIds = [];
-
-  // Master Data Lists (Fetched from Supabase)
+  // Master Data Lists
+  List<Map<String, dynamic>> _masterGenders = [];
   List<Map<String, dynamic>> _masterInterests = [];
-  List<String> _masterGenders = [];
-  List<String> _masterExpectations = [];
-  List<String> _masterEducation = [];
+  List<Map<String, dynamic>> _masterExpectations = [];
+  List<Map<String, dynamic>> _masterEducation = [];
 
-  // Image State
-  final ImagePicker _picker = ImagePicker();
-  final List<XFile?> _selectedImages = [null, null, null];
+  // User Selections (Storing IDs)
+  int? _selectedGenderId;
+  int? _selectedExpectationId;
+  int? _selectedEducationId;
+  final List<int> _selectedInterestIds = [];
+  
+  final List<File> _images = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchMasterData(); // Fetch all master tables at startup
+    _fetchMasterData();
+  }
+
+  Future<void> _fetchMasterData() async {
+    setState(() => _isLoading = true);
+    try {
+      final supabase = Supabase.instance.client;
+      
+      final gendersResponse = await supabase.from('master_genders').select();
+      final interestsResponse = await supabase.from('master_interests').select();
+      final expectationsResponse = await supabase.from('master_expectations').select();
+      final educationResponse = await supabase.from('master_education').select();
+
+      setState(() {
+        _masterGenders = List<Map<String, dynamic>>.from(gendersResponse);
+        _masterInterests = List<Map<String, dynamic>>.from(interestsResponse);
+        _masterExpectations = List<Map<String, dynamic>>.from(expectationsResponse);
+        _masterEducation = List<Map<String, dynamic>>.from(educationResponse);
+      });
+    } catch (e) {
+      debugPrint('Error fetching master data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error loading options. Please restart.'))
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -55,408 +78,482 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _pageController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _locationController.dispose();
     _bioController.dispose();
     _workController.dispose();
     super.dispose();
   }
 
-  // --- FETCH ALL MASTER DATA IN PARALLEL ---
-  Future<void> _fetchMasterData() async {
-    try {
-      final client = Supabase.instance.client;
-      
-      final interestsFuture = client.from('master_interests').select('id, name').order('name');
-      final gendersFuture = client.from('master_genders').select('name').order('id');
-      final expectationsFuture = client.from('master_expectations').select('name').order('id');
-      final educationFuture = client.from('master_education').select('name').order('id');
+  void _nextPage() {
+    if (_currentPage < 6) {
+      _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    } else {
+      _completeOnboarding();
+    }
+  }
 
-      final results = await Future.wait([interestsFuture, gendersFuture, expectationsFuture, educationFuture]);
-
-      if (mounted) {
-        setState(() {
-          _masterInterests = List<Map<String, dynamic>>.from(results[0]);
-          _masterGenders = (results[1] as List).map((e) => e['name'] as String).toList();
-          _masterExpectations = (results[2] as List).map((e) => e['name'] as String).toList();
-          _masterEducation = (results[3] as List).map((e) => e['name'] as String).toList();
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching master data: $e');
+  Future<void> _pickImage() async {
+    if (_images.length >= 6) return;
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    
+    if (pickedFile != null) {
+      setState(() {
+        _images.add(File(pickedFile.path));
+      });
     }
   }
 
   Future<void> _completeOnboarding() async {
-    if (_selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select your Date of Birth.')));
+    if (_images.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload at least one image')));
       return;
     }
-    if (_selectedInterestIds.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select at least 3 interests.')));
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter your date of birth')));
       return;
     }
 
     setState(() => _isLoading = true);
+    
     try {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('No user found. Please login again.');
+      if (user == null) throw Exception("User not logged in");
 
-      List<String> uploadedImageUrls = [];
-      final dio = Dio();
-      const String uploadApiUrl = 'https://backend.duvamobile.workers.dev/upload';
-
-      for (var imageFile in _selectedImages) {
-        if (imageFile != null) {
-          String fileName = p.basename(imageFile.path);
-          FormData formData = FormData.fromMap({
-            "image": await MultipartFile.fromFile(imageFile.path, filename: fileName),
-          });
-          final session = Supabase.instance.client.auth.currentSession;
-          var response = await dio.post(
-            uploadApiUrl,
-            data: formData,
-            options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
-          );
-
-          if (response.statusCode == 200 && response.data['success'] == true) {
-            uploadedImageUrls.add(response.data['url']);
-          } else {
-            throw Exception('Failed to upload image.');
-          }
-        }
+      List<String> imageUrls = [];
+      for (int i = 0; i < _images.length; i++) {
+        final file = _images[i];
+        final fileExt = file.path.split('.').last;
+        final fileName = '${user.id}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+        
+        await Supabase.instance.client.storage.from('avatars').upload(fileName, file);
+        final publicUrl = Supabase.instance.client.storage.from('avatars').getPublicUrl(fileName);
+        imageUrls.add(publicUrl);
       }
 
-      if (uploadedImageUrls.isEmpty) throw Exception('You must upload at least one photo.');
+      String city = "Unknown Location";
+      double lat = 0.0, lng = 0.0;
+      
+      try {
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (serviceEnabled) {
+          LocationPermission permission = await Geolocator.checkPermission();
+          if (permission == LocationPermission.denied) {
+            permission = await Geolocator.requestPermission();
+          }
+          if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+            Position position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+            lat = position.latitude;
+            lng = position.longitude;
+            List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+            if (placemarks.isNotEmpty) {
+              city = "${placemarks.first.locality}, ${placemarks.first.country}";
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Location error during onboarding: $e");
+      }
 
-      // --- SAVE WITH NEW MASTER TABLE SELECTIONS ---
-      await Supabase.instance.client.from('profiles').insert({
+      final String? selectedGenderName = _selectedGenderId != null 
+          ? _masterGenders.firstWhere((g) => g['id'] == _selectedGenderId)['name'] 
+          : null;
+      final String? selectedEducationName = _selectedEducationId != null 
+          ? _masterEducation.firstWhere((e) => e['id'] == _selectedEducationId)['name'] 
+          : null;
+      final String? selectedExpectationName = _selectedExpectationId != null 
+          ? _masterExpectations.firstWhere((e) => e['id'] == _selectedExpectationId)['name'] 
+          : null;
+
+      await Supabase.instance.client.from('profiles').upsert({
         'id': user.id,
         'first_name': _firstNameController.text.trim(),
         'last_name': _lastNameController.text.trim(),
-        'location': _locationController.text.trim(),
-        'dob': _selectedDate!.toIso8601String(),
         'bio': _bioController.text.trim(),
         'work': _workController.text.trim(),
-        'gender': _selectedGender,
-        'looking_for_gender': _selectedLookingForGender,
-        'education': _selectedEducation,
-        'expectations': _selectedExpectation,
-        'images': uploadedImageUrls,
-        'created_at': DateTime.now().toIso8601String(),
+        'dob': _selectedDate!.toIso8601String(),
+        'gender': selectedGenderName, 
+        'education': selectedEducationName,
+        'expectations': selectedExpectationName,
+        'location': city,
+        'latitude': lat,
+        'longitude': lng,
+        'images': imageUrls,
+        'updated_at': DateTime.now().toIso8601String(),
       });
 
-      final interestInserts = _selectedInterestIds.map((interestId) => {'profile_id': user.id, 'interest_id': interestId}).toList();
-      await Supabase.instance.client.from('profile_interests').insert(interestInserts);
+      if (_selectedInterestIds.isNotEmpty) {
+        List<Map<String, dynamic>> profileInterests = _selectedInterestIds.map((interestId) {
+          return {
+            'profile_id': user.id,
+            'interest_id': interestId,
+          };
+        }).toList();
+
+        await Supabase.instance.client.from('profile_interests').delete().eq('profile_id', user.id);
+        await Supabase.instance.client.from('profile_interests').insert(profileInterests);
+      }
 
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ProfileScreen()));
-      
-    } on DioException catch (e) {
-      debugPrint('DIO CRASH DATA: ${e.response?.data}');
-      if (mounted) {
-        String errorMsg = 'Network Error';
-        if (e.response?.data != null && e.response?.data is Map) {
-          errorMsg = e.response?.data['error'] ?? e.message;
-        } else {
-          errorMsg = e.message ?? 'Unknown network error';
-        }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
-      }
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout()));
     } catch (e) {
-      debugPrint('Onboarding Error: $e');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      debugPrint("Onboarding error: $e");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving profile: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _nextPage() {
-    // Validation for Step 1
-    if (_currentPage == 0 && (_firstNameController.text.isEmpty || _selectedDate == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and DOB are required.')));
-      return;
-    }
-    // Validation for Step 2
-    if (_currentPage == 1 && (_selectedGender == null || _selectedLookingForGender == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select your gender and preference.')));
-      return;
-    }
-
-    _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-  }
-
-  Future<void> _pickImage(int index) async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery, imageQuality: 60, maxWidth: 1080, maxHeight: 1080,
-    );
-    if (image != null) setState(() => _selectedImages[index] = image);
-  }
-
-  int _calculateAge(DateTime dob) {
-    final today = DateTime.now();
-    int age = today.year - dob.year;
-    if (today.month < dob.month || (today.month == dob.month && today.day < dob.day)) age--;
-    return age;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: colorScheme.background,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(color: AppTheme.hotPink),
+              const SizedBox(height: 24),
+              Text('Building your profile...', style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold))
+            ],
+          )
+        )
+      );
+    }
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colorScheme.background,
       appBar: AppBar(
-        backgroundColor: Colors.white, elevation: 0,
-        leading: _currentPage > 0 ? IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.black), onPressed: () => _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut)) : null,
-        title: LinearProgressIndicator(
-          value: (_currentPage + 1) / 4, backgroundColor: Colors.grey[200], valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: _currentPage > 0 
+          ? IconButton(
+              icon: Icon(Icons.arrow_back_ios, color: colorScheme.onSurface), 
+              onPressed: () => _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut)
+            ) 
+          : null,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(7, (index) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            height: 6, width: _currentPage == index ? 24 : 8,
+            decoration: BoxDecoration(
+              gradient: _currentPage == index ? const LinearGradient(colors: [AppTheme.hotPink, AppTheme.skySurge]) : null,
+              color: _currentPage == index ? null : colorScheme.surface,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: _currentPage == index ? [BoxShadow(color: AppTheme.hotPink.withValues(alpha: 0.5), blurRadius: 6)] : null,
+            ),
+          )),
         ),
+        actions: const [SizedBox(width: 48)],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (int page) => setState(() => _currentPage = page),
+      body: PageView(
+        controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        onPageChanged: (int page) => setState(() => _currentPage = page),
+        children: [
+          _buildNameStep(colorScheme),
+          _buildDobStep(colorScheme),
+          _buildGenderStep(colorScheme),
+          _buildInterestsStep(colorScheme),
+          _buildDetailsStep(colorScheme),
+          _buildExpectationsStep(colorScheme),
+          _buildPhotosStep(colorScheme),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _nextPage,
+        backgroundColor: AppTheme.hotPink,
+        elevation: 10,
+        label: Text(_currentPage == 6 ? 'LET\'S GO' : 'NEXT', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2, color: Colors.white)),
+        icon: Icon(_currentPage == 6 ? Icons.rocket_launch : Icons.arrow_forward_ios, size: 20, color: Colors.white),
+      ),
+    );
+  }
+
+  // --- STEP 1: NAME ---
+  Widget _buildNameStep(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.skySurge, AppTheme.hotPink]).createShader(bounds),
+            child: const Text('Who are you?', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white)),
+          ),
+          const SizedBox(height: 48),
+          TextField(controller: _firstNameController, decoration: const InputDecoration(labelText: 'First Name')),
+          const SizedBox(height: 24),
+          TextField(controller: _lastNameController, decoration: const InputDecoration(labelText: 'Last Name (Optional)')),
+        ],
+      ),
+    );
+  }
+
+  // --- STEP 2: DOB ---
+  Widget _buildDobStep(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.hotPink, AppTheme.skySurge]).createShader(bounds),
+            child: const Text('When is your birthday?', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, height: 1.2)),
+          ),
+          const SizedBox(height: 16),
+          Text('You must be at least 18 years old to use Duva.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
+          const SizedBox(height: 48),
+          InkWell(
+            onTap: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+                firstDate: DateTime(1900),
+                lastDate: DateTime.now(),
+              );
+              if (picked != null) setState(() => _selectedDate = picked);
+            },
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: colorScheme.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.skySurge, width: 2)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStep1Basics(),
-                  _buildStep2Details(),
-                  _buildStep3Interests(),
-                  _buildStep4Photos(),
+                  Text(_selectedDate == null ? 'Select Date' : '${_selectedDate!.toLocal()}'.split(' ')[0], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+                  const Icon(Icons.calendar_today, color: AppTheme.skySurge),
                 ],
               ),
             ),
-            _buildBottomBar(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStep1Basics() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Let\'s get the basics down.', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 32),
-            TextField(
-              controller: _firstNameController, textCapitalization: TextCapitalization.words, keyboardType: TextInputType.name, maxLength: 20,
-              decoration: const InputDecoration(labelText: 'First Name', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _lastNameController, textCapitalization: TextCapitalization.words, keyboardType: TextInputType.name, maxLength: 20,
-              decoration: const InputDecoration(labelText: 'Last Name (Optional)', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _locationController, textCapitalization: TextCapitalization.words, keyboardType: TextInputType.streetAddress, maxLength: 40,
-              decoration: const InputDecoration(labelText: 'City, Country', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 24),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey[400]!)),
-              title: Text(_selectedDate == null ? 'Select Date of Birth' : 'DOB: ${_selectedDate!.toLocal().toString().split(' ')[0]}',
-                style: TextStyle(fontWeight: _selectedDate == null ? FontWeight.normal : FontWeight.bold, color: _selectedDate == null ? Colors.grey[700] : Colors.black),
-              ),
-              trailing: const Icon(Icons.calendar_today, color: Colors.blueAccent),
-              onTap: () async {
-                final DateTime? picked = await showDatePicker(
-                  context: context, initialDate: DateTime(2000), firstDate: DateTime(1950), lastDate: DateTime.now().subtract(const Duration(days: 6570)),
-                  builder: (context, child) => Theme(data: Theme.of(context).copyWith(colorScheme: const ColorScheme.light(primary: Colors.blueAccent, onPrimary: Colors.white, onSurface: Colors.black)), child: child!),
-                );
-                if (picked != null) setState(() => _selectedDate = picked);
-              },
-            ),
-            if (_selectedDate != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12.0, left: 4.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('You are ${_calculateAge(_selectedDate!)} years old.', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                    const SizedBox(height: 4),
-                    const Text('⚠️ This cannot be changed later.', style: TextStyle(fontSize: 12, color: Colors.redAccent, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- NEW: DYNAMIC STEP 2 USING MASTER TABLES ---
-  Widget _buildStep2Details() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Tell us more about you.', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 32),
-
-            // GENDER SELECTION
-            const Text('I am a...', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8.0,
-              children: _masterGenders.map((gender) => ChoiceChip(
-                label: Text(gender),
-                selected: _selectedGender == gender,
-                selectedColor: Colors.blue[100],
-                onSelected: (selected) { if (selected) setState(() => _selectedGender = gender); },
-              )).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // PREFERENCE SELECTION
-            const Text('Looking to meet...', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8.0,
-              children: [..._masterGenders, 'Everyone'].map((gender) => ChoiceChip(
-                label: Text(gender),
-                selected: _selectedLookingForGender == gender,
-                selectedColor: Colors.blue[100],
-                onSelected: (selected) { if (selected) setState(() => _selectedLookingForGender = gender); },
-              )).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // EXPECTATIONS DROPDOWN
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'I am looking for', border: OutlineInputBorder()),
-              value: _selectedExpectation,
-              items: _masterExpectations.map((exp) => DropdownMenuItem(value: exp, child: Text(exp))).toList(),
-              onChanged: (val) => setState(() => _selectedExpectation = val),
-            ),
-            const SizedBox(height: 16),
-
-            // EDUCATION DROPDOWN
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Highest Education', border: OutlineInputBorder()),
-              value: _selectedEducation,
-              items: _masterEducation.map((edu) => DropdownMenuItem(value: edu, child: Text(edu))).toList(),
-              onChanged: (val) => setState(() => _selectedEducation = val),
-            ),
-            const SizedBox(height: 16),
-
-            // WORK & BIO
-            TextField(
-              controller: _workController, textCapitalization: TextCapitalization.words, maxLength: 40,
-              decoration: const InputDecoration(labelText: 'Work (Job Title/Company)', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _bioController, textCapitalization: TextCapitalization.sentences, keyboardType: TextInputType.multiline, maxLines: 3, maxLength: 250,
-              decoration: const InputDecoration(labelText: 'Bio', hintText: 'A bit about me...', border: OutlineInputBorder()),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStep3Interests() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Pick up to 5 interests.', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text('${_selectedInterestIds.length} / 5 selected', style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 24),
-          Expanded(
-            child: _masterInterests.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    child: Wrap(
-                      spacing: 10.0, runSpacing: 12.0,
-                      children: _masterInterests.map((interest) {
-                        final bool isSelected = _selectedInterestIds.contains(interest['id']);
-                        return FilterChip(
-                          label: Text(interest['name']), selected: isSelected, selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                          checkmarkColor: Theme.of(context).colorScheme.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          onSelected: (bool selected) {
-                            setState(() {
-                              if (selected) {
-                                if (_selectedInterestIds.length < 5) {
-                                  _selectedInterestIds.add(interest['id']);
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You can only select up to 5 interests.')));
-                                }
-                              } else {
-                                _selectedInterestIds.remove(interest['id']);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStep4Photos() {
+  // --- STEP 3: GENDER ---
+  Widget _buildGenderStep(ColorScheme colorScheme) {
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(32.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Add your best photos.', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.skySurge, AppTheme.hotPink]).createShader(bounds),
+            child: const Text('I identify as...', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white)),
+          ),
+          const SizedBox(height: 48),
+          ..._masterGenders.map((gender) => Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: InkWell(
+              onTap: () => setState(() => _selectedGenderId = gender['id']),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _selectedGenderId == gender['id'] ? AppTheme.hotPink.withValues(alpha: 0.1) : colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _selectedGenderId == gender['id'] ? AppTheme.hotPink : Colors.transparent, width: 2),
+                  boxShadow: _selectedGenderId == gender['id'] ? [BoxShadow(color: AppTheme.hotPink.withValues(alpha: 0.3), blurRadius: 10)] : null,
+                ),
+                child: Text(gender['name'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _selectedGenderId == gender['id'] ? AppTheme.hotPink : colorScheme.onSurface)),
+              ),
+            ),
+          )).toList(),
+        ],
+      ),
+    );
+  }
+
+  // --- STEP 4: INTERESTS ---
+  Widget _buildInterestsStep(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 40),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.hotPink, AppTheme.skySurge]).createShader(bounds),
+            child: const Text('What are you into?', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1)),
+          ),
+          const SizedBox(height: 16),
+          Text('Pick up to 5 interests to help us find better alignments.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
+          const SizedBox(height: 32),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 12.0, runSpacing: 12.0,
+                children: _masterInterests.map((interest) {
+                  final isSelected = _selectedInterestIds.contains(interest['id']);
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedInterestIds.remove(interest['id']);
+                        } else if (_selectedInterestIds.length < 5) {
+                          _selectedInterestIds.add(interest['id']);
+                        }
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppTheme.skySurge : colorScheme.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: isSelected ? [BoxShadow(color: AppTheme.skySurge.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4))] : [],
+                      ),
+                      child: Text(
+                        interest['name'], 
+                        style: TextStyle(color: isSelected ? Colors.white : colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 15)
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- STEP 5: DETAILS ---
+  Widget _buildDetailsStep(ColorScheme colorScheme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 40),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.skySurge, AppTheme.hotPink]).createShader(bounds),
+            child: const Text('The Details', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white)),
+          ),
+          const SizedBox(height: 48),
+          
+          Text('EDUCATION', style: TextStyle(fontWeight: FontWeight.w900, color: colorScheme.onSurface.withValues(alpha: 0.5), letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          const Text('Upload up to 3 images. The first will be your main profile picture.', style: TextStyle(color: Colors.grey)),
+          DropdownButtonFormField<int>(
+            decoration: const InputDecoration(hintText: 'Select Education'),
+            icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.skySurge),
+            value: _selectedEducationId,
+            items: _masterEducation.map((e) => DropdownMenuItem<int>(value: e['id'], child: Text(e['name'], style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold)))).toList(),
+            onChanged: (val) => setState(() => _selectedEducationId = val),
+          ),
+          
+          const SizedBox(height: 32),
+          Text('WORK', style: TextStyle(fontWeight: FontWeight.w900, color: colorScheme.onSurface.withValues(alpha: 0.5), letterSpacing: 1.5)),
+          const SizedBox(height: 8),
+          TextField(controller: _workController, decoration: const InputDecoration(hintText: 'Job Title / Company')),
+          
+          const SizedBox(height: 32),
+          Text('BIO', style: TextStyle(fontWeight: FontWeight.w900, color: colorScheme.onSurface.withValues(alpha: 0.5), letterSpacing: 1.5)),
+          const SizedBox(height: 8),
+          TextField(controller: _bioController, maxLines: 4, decoration: const InputDecoration(hintText: 'A little bit about me...')),
+        ],
+      ),
+    );
+  }
+
+  // --- STEP 6: EXPECTATIONS ---
+  Widget _buildExpectationsStep(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.hotPink, AppTheme.skySurge]).createShader(bounds),
+            child: const Text('I\'m looking for...', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, height: 1.2)),
+          ),
+          const SizedBox(height: 48),
+          ..._masterExpectations.map((exp) => Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: InkWell(
+              onTap: () => setState(() => _selectedExpectationId = exp['id']),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _selectedExpectationId == exp['id'] ? AppTheme.skySurge.withValues(alpha: 0.1) : colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _selectedExpectationId == exp['id'] ? AppTheme.skySurge : Colors.transparent, width: 2),
+                  boxShadow: _selectedExpectationId == exp['id'] ? [BoxShadow(color: AppTheme.skySurge.withValues(alpha: 0.3), blurRadius: 10)] : null,
+                ),
+                child: Text(exp['name'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _selectedExpectationId == exp['id'] ? AppTheme.skySurge : colorScheme.onSurface)),
+              ),
+            ),
+          )).toList(),
+        ],
+      ),
+    );
+  }
+
+  // --- STEP 7: PHOTOS ---
+  Widget _buildPhotosStep(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 40),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.skySurge, AppTheme.hotPink]).createShader(bounds),
+            child: const Text('Show your face', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1)),
+          ),
+          const SizedBox(height: 16),
+          Text('Upload up to 6 photos. The first one will be your main profile picture.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6), fontSize: 16)),
           const SizedBox(height: 32),
           Expanded(
             child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.7),
-              itemCount: 3,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.75),
+              itemCount: 6,
               itemBuilder: (context, index) {
-                return GestureDetector(
-                  onTap: () => _pickImage(index),
-                  child: Container(
-                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey[300]!, width: 2)),
-                    clipBehavior: Clip.hardEdge,
-                    child: _selectedImages[index] == null
-                        ? const Center(child: Icon(Icons.add_a_photo, size: 40, color: Colors.grey))
-                        : Image.file(File(_selectedImages[index]!.path), fit: BoxFit.cover),
-                  ),
-                );
+                if (index < _images.length) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_images[index], fit: BoxFit.cover)),
+                      Positioned(
+                        top: 4, right: 4,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _images.removeAt(index)),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                            child: const Icon(Icons.close, color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  return GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.skySurge.withValues(alpha: 0.3), width: 2, style: BorderStyle.solid),
+                      ),
+                      child: const Center(child: Icon(Icons.add, color: AppTheme.skySurge, size: 32)),
+                    ),
+                  );
+                }
               },
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      padding: const EdgeInsets.all(24.0),
-      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), offset: const Offset(0, -4), blurRadius: 10)]),
-      child: SizedBox(
-        width: double.infinity, height: 56,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-          onPressed: _isLoading ? null : () {
-            if (_currentPage < 3) {
-              _nextPage();
-            } else {
-              _completeOnboarding();
-            }
-          },
-          child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(_currentPage < 3 ? 'Continue' : 'Complete Profile', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        ),
       ),
     );
   }
