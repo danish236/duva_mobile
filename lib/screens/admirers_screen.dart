@@ -45,7 +45,16 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Secret Admirers'),
+        title: Row(
+          children: [
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+              child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            const Text('ADMIRERS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+          ],
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.auto_awesome), onPressed: () {}), // Premium upgrade trigger later
         ],

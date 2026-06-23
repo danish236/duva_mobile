@@ -114,8 +114,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (_errorMessage != null || _myProfile == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('MY PROFILE')),
-        body: Center(child: Text(_errorMessage ?? 'Profile not found.', style: const TextStyle(color: Colors.white))),
+        backgroundColor: AppTheme.voidBackground,
+        appBar: AppBar(
+          title: Row(
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+                child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+            ],
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: AppTheme.primaryRose),
+                const SizedBox(height: 24),
+                Text(
+                  _errorMessage ?? 'Profile alignment incomplete.\nHave you initialized your profile?', 
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: AppTheme.textSecondary.withValues(alpha: 0.8), height: 1.5)
+                ),
+                const SizedBox(height: 40),
+                Container(
+                  decoration: BoxDecoration(
+                    boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))]
+                  ),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryRose,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    ),
+                    onPressed: () async {
+                      await Supabase.instance.client.auth.signOut();
+                      if (context.mounted) {
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      }
+                    },
+                    child: const Text('SIGN OUT & RESTART', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -135,9 +183,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-          child: const Text('MY PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, letterSpacing: 1.5, color: Colors.white)),
+        title: Row(
+          children: [
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+              child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+          ],
         ),
         actions: [
           IconButton(

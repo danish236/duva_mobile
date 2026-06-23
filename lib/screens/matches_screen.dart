@@ -49,7 +49,16 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return Scaffold(
       backgroundColor: colorScheme.background,
       appBar: AppBar(
-        title: Text('Matches', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: colorScheme.onSurface)),
+        title: Row(
+          children: [
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+              child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            const Text('MATCHES', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+          ],
+        ),
         backgroundColor: colorScheme.surface,
         elevation: 0,
         actions: [

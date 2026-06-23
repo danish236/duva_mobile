@@ -15,7 +15,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
-  // Animation controller for the tactile button press
   late AnimationController _btnController;
   late Animation<double> _btnScale;
 
@@ -60,25 +59,34 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 60),
-              // Glowing Logo Icon
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.primaryRose.withValues(alpha: 0.1),
-                  boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.2), blurRadius: 40, spreadRadius: 10)],
-                ),
-                child: const Icon(Icons.all_inclusive_rounded, size: 64, color: AppTheme.primaryRose),
-              ),
-              const SizedBox(height: 32),
               
-              // Midnight Glass Gradient Title
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-                child: const Text('DUVA', textAlign: TextAlign.center, style: TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 4)),
+              // --- YOUR CUSTOM GLOWING LOGO ---
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.primaryRose.withValues(alpha: 0.05),
+                    boxShadow: [BoxShadow(color: AppTheme.electricCyan.withValues(alpha: 0.15), blurRadius: 60, spreadRadius: 10)],
+                  ),
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [AppTheme.electricCyan, AppTheme.primaryRose],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ).createShader(bounds),
+                    // Using your transparent white logo!
+                    child: Image.asset(
+                      'assets/logo_nobg.png', 
+                      height: 100, 
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 8),
-              Text('ENTER THE VOID', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 2)),
+              const SizedBox(height: 24),
+              
+              const Text('ENTER THE VOID', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 4)),
               
               const SizedBox(height: 60), 
               
@@ -105,7 +113,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               ),
               const SizedBox(height: 48),
               
-              // Tactile Animated Login Button
               GestureDetector(
                 onTapDown: (_) => _btnController.forward(),
                 onTapUp: (_) {
@@ -135,9 +142,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               TextButton(
                 onPressed: () => Navigator.push(context, PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) => const RegisterScreen(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(opacity: animation, child: child); // Smooth cross-fade to register
-                  },
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
                 )), 
                 child: const Text('NEW HERE? INITIALIZE PROFILE', style: TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.w900, letterSpacing: 1.2, fontSize: 12))
               ),

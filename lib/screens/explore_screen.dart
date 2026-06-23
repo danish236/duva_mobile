@@ -143,7 +143,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (_potentialMatches.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('DUVA', style: TextStyle(color: AppTheme.primaryRose)),
+          title: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+            child: Image.asset('assets/logo_nobg.png', height: 32, color: Colors.white),
+          ),
           actions: [
             IconButton(
               icon: const Icon(Icons.tune), 
@@ -193,7 +196,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true, // Make app bar float over the image!
       appBar: AppBar(
-        title: const Text('DUVA', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 28, letterSpacing: 2)),
+        title: Image.asset('assets/logo_nobg.png', height: 32, color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.tune, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 10)]), 

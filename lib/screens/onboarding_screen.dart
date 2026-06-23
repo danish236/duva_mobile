@@ -297,9 +297,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds), 
-            child: const Text('Who are you?', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white))
+          Center(
+            child: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds), 
+              child: Image.asset('assets/logo_nobg.png', height: 80),
+            ),
           ),
           const SizedBox(height: 48),
           TextField(controller: _firstNameController, maxLength: 30, decoration: const InputDecoration(labelText: 'First Name')),
