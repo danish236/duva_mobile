@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'chat_screen.dart'; 
 import 'notifications_screen.dart';
 import '../theme.dart';
+import '../widgets/premium_shimmer.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -69,7 +70,67 @@ class _MatchesScreenState extends State<MatchesScreen> {
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryRose))
+        // --- THE NEW 2026 INBOX SKELETON LOADER ---
+        ? PremiumShimmer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: ShimmerBox(width: 120, height: 20, borderRadius: 8), // "New Alignments" text
+                ),
+                // Horizontal avatar circles
+                SizedBox(
+                  height: 110,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: 5, // Show 5 ghost circles
+                    itemBuilder: (context, index) => const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Column(
+                        children: [
+                          ShimmerBox(width: 70, height: 70, borderRadius: 35),
+                          SizedBox(height: 8),
+                          ShimmerBox(width: 50, height: 12, borderRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: ShimmerBox(width: 100, height: 20, borderRadius: 8), // "Messages" text
+                ),
+                // Vertical message lists
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: 6,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      child: Row(
+                        children: [
+                          const ShimmerBox(width: 56, height: 56, borderRadius: 28),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                ShimmerBox(width: 150, height: 16, borderRadius: 6),
+                                SizedBox(height: 8),
+                                ShimmerBox(width: double.infinity, height: 12, borderRadius: 4),
+                              ],
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        // ------------------------------------------
         : _matches.isEmpty 
           ? _buildEmptyState(colorScheme)
           : _buildInbox(colorScheme),

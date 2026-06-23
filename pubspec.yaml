@@ -42,6 +42,8 @@ dependencies:
   geolocator: ^14.0.3
   geocoding: ^4.0.0
   google_fonts: ^6.2.1
+  flutter_card_swiper: ^7.2.0
+  shimmer: ^3.0.0
 
 dev_dependencies:
   flutter_test:
