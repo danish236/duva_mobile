@@ -20,7 +20,6 @@ class ProfileData {
   final String? currentDateBid; 
   final List<String> interests; 
   
-  // New Lifestyle Params
   final String? height;
   final String? weight;
   final String? smoking;
@@ -67,7 +66,7 @@ class ProfileData {
       currentDateBid: json['current_date_bid'], 
       interests: parsedInterests,
       height: json['height'],
-      weight: json['weight'] != null ? json['weight'].toString() : null,
+      weight: json['weight']?.toString(), // Safely parse int or string
       smoking: json['smoking'],
       drinking: json['drinking'],
       workout: json['workout'],
@@ -106,79 +105,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  bool _isValid(String? val) => val != null && val.trim().isNotEmpty && val != 'null';
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppTheme.primaryRose)));
 
     if (_errorMessage != null || _myProfile == null) {
       return Scaffold(
-        backgroundColor: AppTheme.voidBackground,
-        appBar: AppBar(
-          title: Row(
-            children: [
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-                child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
-              const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
-            ],
-          ),
-        ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 64, color: AppTheme.primaryRose),
-                const SizedBox(height: 24),
-                Text(
-                  _errorMessage ?? 'Profile alignment incomplete.\nHave you initialized your profile?', 
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: AppTheme.textSecondary.withValues(alpha: 0.8), height: 1.5)
-                ),
-                const SizedBox(height: 40),
-                Container(
-                  decoration: BoxDecoration(
-                    boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))]
-                  ),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryRose,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    ),
-                    onPressed: () async {
-                      await Supabase.instance.client.auth.signOut();
-                      if (context.mounted) {
-                        Navigator.of(context).popUntil((route) => route.isFirst);
-                      }
-                    },
-                    child: const Text('SIGN OUT & RESTART', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        appBar: AppBar(title: const Text('MY PROFILE')),
+        body: Center(child: Text(_errorMessage ?? 'Profile not found.', style: const TextStyle(color: Colors.white))),
       );
     }
 
     final profile = _myProfile!;
     
-    // Compile lifestyle tags dynamically
+    // Hardened logic to prevent empty boxes or null text
     final lifestyleTags = [
-      if (profile.height != null) {'icon': Icons.height, 'value': profile.height},
-      if (profile.weight != null) {'icon': Icons.monitor_weight, 'value': '${profile.weight} kg'},
-      if (profile.zodiac != null) {'icon': Icons.star_border, 'value': profile.zodiac},
-      if (profile.workout != null) {'icon': Icons.fitness_center, 'value': profile.workout},
-      if (profile.smoking != null) {'icon': Icons.smoking_rooms, 'value': profile.smoking},
-      if (profile.drinking != null) {'icon': Icons.local_bar, 'value': profile.drinking},
-      if (profile.pets != null) {'icon': Icons.pets, 'value': profile.pets},
-      if (profile.kids != null) {'icon': Icons.child_care, 'value': profile.kids},
+      if (_isValid(profile.height)) {'icon': Icons.height, 'value': profile.height},
+      if (_isValid(profile.weight)) {'icon': Icons.fitness_center, 'value': '${profile.weight} kg'},
+      if (_isValid(profile.zodiac)) {'icon': Icons.auto_awesome, 'value': profile.zodiac},
+      if (_isValid(profile.workout)) {'icon': Icons.directions_run, 'value': profile.workout},
+      if (_isValid(profile.smoking)) {'icon': Icons.smoking_rooms, 'value': profile.smoking},
+      if (_isValid(profile.drinking)) {'icon': Icons.local_bar, 'value': profile.drinking},
+      if (_isValid(profile.pets)) {'icon': Icons.pets, 'value': profile.pets},
+      if (_isValid(profile.kids)) {'icon': Icons.face, 'value': profile.kids},
     ];
 
     return Scaffold(
@@ -205,6 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -216,20 +168,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
                   const SizedBox(height: 12),
-                  Row(children: [const Icon(Icons.location_on, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.location, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.w600))]),
-                  if (profile.work != null && profile.work!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.work, size: 18, color: AppTheme.primaryRose), const SizedBox(width: 6), Text(profile.work!, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.w600))])),
-                  if (profile.education != null && profile.education!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.school, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.education!, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 16, fontWeight: FontWeight.w600))])),
+                  Row(children: [const Icon(Icons.location_on, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.location, style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))]),
+                  if (_isValid(profile.work)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.work, size: 18, color: AppTheme.primaryRose), const SizedBox(width: 6), Text(profile.work!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
+                  if (_isValid(profile.education)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.school, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.education!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
                 ],
               ),
             ),
 
-            if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
+            if (_isValid(profile.currentDateBid))
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 padding: const EdgeInsets.all(20.0),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(colors: [AppTheme.primaryRose, AppTheme.electricCyan], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                   boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.4), blurRadius: 15, offset: const Offset(0, 8))],
                 ),
                 child: Column(
@@ -247,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 padding: const EdgeInsets.all(24.0),
-                decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12)),
+                decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white12)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -257,14 +209,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       spacing: 10.0, runSpacing: 10.0, 
                       children: lifestyleTags.map((tag) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white24)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(color: AppTheme.voidBackground, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white24)),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(tag['icon'] as IconData, size: 14, color: AppTheme.electricCyan),
-                              const SizedBox(width: 6),
-                              Text(tag['value'] as String, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Icon(tag['icon'] as IconData, size: 16, color: AppTheme.textSecondary),
+                              const SizedBox(width: 8),
+                              Text(tag['value'] as String, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
                             ],
                           ),
                         );
@@ -274,15 +226,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            if (profile.bio != null && profile.bio!.isNotEmpty) _buildPunchyPromptCard('ABOUT ME', profile.bio!),
+            if (_isValid(profile.bio)) _buildPunchyPromptCard('ABOUT ME', profile.bio!),
             if (profile.images.length > 1) _buildFullWidthImage(profile.images[1]),
-            if (profile.expectations != null && profile.expectations!.isNotEmpty) _buildPunchyPromptCard('LOOKING FOR', profile.expectations!),
+            if (_isValid(profile.expectations)) _buildPunchyPromptCard('LOOKING FOR', profile.expectations!),
             
             if (profile.interests.isNotEmpty)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                 padding: const EdgeInsets.all(24.0),
-                decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12)),
+                decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white12)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -293,8 +245,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: profile.interests.map((interest) {
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(color: AppTheme.electricCyan.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppTheme.electricCyan.withValues(alpha: 0.3))),
-                          child: Text(interest, style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, fontSize: 14)),
+                          decoration: BoxDecoration(color: AppTheme.electricCyan.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(24), border: Border.all(color: AppTheme.electricCyan.withValues(alpha: 0.3))),
+                          child: Text(interest, style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.w800, fontSize: 14)),
                         );
                       }).toList(),
                     ),
@@ -303,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
 
             if (profile.images.length > 2) _buildFullWidthImage(profile.images[2]),
-            const SizedBox(height: 40), 
+            const SizedBox(height: 120), // Bottom padding for floating nav bar
           ],
         ),
       ),
@@ -313,7 +265,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildFullWidthImage(String imageUrl) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8))]),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(32), // Deep, continuous curve
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, 10))]
+      ),
       clipBehavior: Clip.antiAlias,
       child: Image.network(
         imageUrl, height: 450, fit: BoxFit.cover,
@@ -329,7 +284,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       padding: const EdgeInsets.all(24.0),
-      decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white12)),
       child: child,
     );
   }
@@ -338,7 +293,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       padding: const EdgeInsets.all(24.0),
-      decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white12)),
+      decoration: BoxDecoration(color: AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

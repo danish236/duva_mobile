@@ -230,10 +230,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ),
       body: PageView.builder(
         controller: _pageController, 
-        physics: const NeverScrollableScrollPhysics(), 
+        physics: const BouncingScrollPhysics(), // Modern bouncy physics
         itemCount: _potentialMatches.length,
         itemBuilder: (context, index) {
-          return _buildCinematicProfileCard(_potentialMatches[index]);
+          // PARALLAX ANIMATION LOGIC
+          return AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, child) {
+              double value = 1.0;
+              if (_pageController.position.haveDimensions) {
+                value = _pageController.page! - index;
+                value = (1 - (value.abs() * 0.3)).clamp(0.0, 1.0); // Scale down to 70%
+              }
+              return Transform.scale(
+                scale: value,
+                child: Opacity(
+                  opacity: value.clamp(0.5, 1.0), // Fade slightly
+                  child: child,
+                ),
+              );
+            },
+            child: _buildCinematicProfileCard(_potentialMatches[index]),
+          );
         }
       ),
     );

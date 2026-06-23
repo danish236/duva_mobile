@@ -129,6 +129,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final userId = Supabase.instance.client.auth.currentUser!.id;
       List<String> finalImageUrls = [];
 
+      // 1. Process Images
       for (int i = 0; i < _currentImages.length; i++) {
         final img = _currentImages[i];
         if (img is String) {
@@ -142,17 +143,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
+      // HELPER: Convert empty strings to null to prevent database crashes
+      String? cleanText(String text) => text.trim().isEmpty ? null : text.trim();
+
+      // 2. Update Profiles
       await Supabase.instance.client.from('profiles').update({
-        'bio': _bioController.text.trim(),
-        'work': _workController.text.trim(),
+        'bio': cleanText(_bioController.text),
+        'work': cleanText(_workController.text),
         'education': _selectedEducation,
         'expectations': _selectedExpectation,
-        'location': _locationController.text.trim(),
-        'current_date_bid': _dateBidController.text.trim(),
+        'location': cleanText(_locationController.text) ?? 'Unknown Location',
+        'current_date_bid': cleanText(_dateBidController.text),
         'gender': _selectedGender,
         'images': finalImageUrls,
         'height': _selectedHeight,
-        'weight': _weightController.text.trim(),
+        'weight': cleanText(_weightController.text),
         'smoking': _selectedSmoking,
         'drinking': _selectedDrinking,
         'workout': _selectedWorkout,
@@ -161,9 +166,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'kids': _selectedKids,
       }).eq('id', userId);
 
-      // FIX: Ensure unique IDs before insert to avoid duplicate constraint error
+      // 3. Update Interests
       final uniqueInterests = _selectedInterestIds.toSet().toList();
-      
       await Supabase.instance.client.from('profile_interests').delete().eq('profile_id', userId);
       
       if (uniqueInterests.isNotEmpty) {
@@ -175,13 +179,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       if (mounted) Navigator.pop(context, true);
+      
+    } on PostgrestException catch (e) {
+      // SPECIFIC DATABASE ERRORS
+      debugPrint("DB Error: ${e.message}");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('DB Error: ${e.message}')));
+    } on StorageException catch (e) {
+      // SPECIFIC IMAGE UPLOAD ERRORS
+      debugPrint("Storage Error: ${e.message}");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('Storage Error: ${e.message}')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update profile.')));
+      // ANY OTHER ERRORS
+      debugPrint("Unknown Error: $e");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('Error: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
-
+  
   void _showSinglePicker(String title, List<String> options, String? currentValue, Function(String) onSelect) {
     showModalBottomSheet(
       context: context,
