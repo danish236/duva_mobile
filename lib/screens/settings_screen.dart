@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dio/dio.dart';
 import '../theme_notifier.dart'; 
 import '../theme.dart';
+import 'info_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -125,6 +126,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   children: [
                     _buildListTile(Icons.email_outlined, 'Email Address', trailing: Supabase.instance.client.auth.currentUser?.email ?? 'Unknown', colorScheme: colorScheme),
+                    // UPDATED: Now these actually push to the new InfoScreens
+                    _buildListTile(Icons.privacy_tip_outlined, 'Privacy Policy', colorScheme: colorScheme, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'privacy')))),
+                    _buildListTile(Icons.description_outlined, 'Terms of Service', colorScheme: colorScheme, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'terms')))),
+                    _buildListTile(Icons.security_outlined, 'Safety Guidelines', colorScheme: colorScheme, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'safety')))),
                     Divider(height: 1, color: colorScheme.onSurface.withValues(alpha: 0.1)),
                     _buildListTile(Icons.security, 'Privacy & Security', colorScheme: colorScheme, onTap: () {}),
                   ],
