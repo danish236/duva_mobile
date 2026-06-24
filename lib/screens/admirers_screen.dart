@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
+import '../widgets/premium_shimmer.dart';
 
 class AdmirersScreen extends StatefulWidget {
   const AdmirersScreen({super.key});
@@ -60,7 +61,19 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
+        ? PremiumShimmer(
+            child: GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, 
+                crossAxisSpacing: 16, 
+                mainAxisSpacing: 16, 
+                childAspectRatio: 0.75
+              ),
+              itemCount: 6, // Show 6 ghosted grid items
+              itemBuilder: (context, index) => const ShimmerBox(width: double.infinity, height: double.infinity, borderRadius: 24),
+            ),
+          )
         : _admirers.isEmpty 
           ? _buildEmptyState() 
           : _buildGrid(),

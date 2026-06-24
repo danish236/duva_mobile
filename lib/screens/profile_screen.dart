@@ -5,6 +5,7 @@ import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import 'edit_profile_screen.dart'; 
 import '../theme.dart';
+import '../widgets/premium_shimmer.dart';
 
 class ProfileData {
   final String id;
@@ -109,7 +110,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppTheme.primaryRose)));
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: AppTheme.voidBackground,
+        appBar: AppBar(
+          title: Row(
+            children: [
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+                child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+            ],
+          ),
+        ),
+        body: const PremiumShimmer(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ShimmerBox(width: double.infinity, height: 450, borderRadius: 32), // Main Image
+                SizedBox(height: 16),
+                ShimmerBox(width: double.infinity, height: 160, borderRadius: 32), // Info Card
+                SizedBox(height: 16),
+                ShimmerBox(width: double.infinity, height: 100, borderRadius: 32), // Date Bid
+                SizedBox(height: 16),
+                ShimmerBox(width: double.infinity, height: 180, borderRadius: 32), // Lifestyle
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    
 
     if (_errorMessage != null || _myProfile == null) {
       return Scaffold(
