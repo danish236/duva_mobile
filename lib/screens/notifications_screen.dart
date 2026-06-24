@@ -82,14 +82,31 @@ Future<void> _fetchNotifications() async {
     );
   }
 
-  Widget _buildNotificationTile(Map<String, dynamic> notif) {
-    final bool isUnread = !notif['is_read'];
-    final bool isAdmirer = notif['type'] == 'new_admirer';
+  Widget _buildNotificationTile(dynamic notif) {
+    final bool isUnread = notif['is_read'] == false;
+    
+    // FIX: Updated to match the actual strings coming from your index.ts backend
+    final bool isAdmirer = notif['type'] == 'like'; 
     final bool isSystem = notif['type'] == 'system';
 
     return InkWell(
-      onTap: () {
-        setState(() => notif['is_read'] = true);
+      onTap: () async {
+        // 1. Update UI instantly
+        if (isUnread) {
+          setState(() => notif['is_read'] = true);
+          
+          // 2. Tell Supabase to mark this SPECIFIC notification as read
+          try {
+            await Supabase.instance.client
+                .from('notifications')
+                .update({'is_read': true})
+                .eq('id', notif['id']);
+          } catch (e) {
+            debugPrint("Failed to update read status: $e");
+          }
+        }
+
+        // 3. Handle Paywall trigger
         if (isAdmirer) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock Premium to see admirers!')));
         }
@@ -99,7 +116,6 @@ Future<void> _fetchNotifications() async {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Row(
           children: [
-            // The Image or Icon Avatar
             Container(
               width: 50, height: 50,
               decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.surfaceGlass, border: Border.all(color: Colors.white12)),
@@ -109,8 +125,12 @@ Future<void> _fetchNotifications() async {
                 : Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(notif['image'], fit: BoxFit.cover),
-                      if (isAdmirer) // Heavy blur for admirers
+                      // Safely handle missing images
+                      if (notif['image'] != null) Image.network(notif['image'], fit: BoxFit.cover)
+                      else const Icon(Icons.person, color: Colors.white54),
+                      
+                      // Blur logic now correctly triggers for 'like' types!
+                      if (isAdmirer) 
                         BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
                           child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.2)),
@@ -119,22 +139,16 @@ Future<void> _fetchNotifications() async {
                   ),
             ),
             const SizedBox(width: 16),
-            
-            // Text Content
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(notif['title'], style: TextStyle(color: Colors.white, fontWeight: isUnread ? FontWeight.w900 : FontWeight.bold, fontSize: 16)),
+                  Text(notif['title'] ?? 'Notification', style: TextStyle(color: Colors.white, fontWeight: isUnread ? FontWeight.w900 : FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
-                  Text(notif['body'], style: TextStyle(color: AppTheme.textSecondary, fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal, fontSize: 14)),
-                  const SizedBox(height: 6),
-                  Text(notif['time'], style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 12)),
+                  Text(notif['message'] ?? '', style: TextStyle(color: AppTheme.textSecondary, fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal, fontSize: 14)),
                 ],
               ),
             ),
-
-            // Unread Glowing Dot
             if (isUnread)
               Container(
                 width: 10, height: 10,
@@ -149,7 +163,6 @@ Future<void> _fetchNotifications() async {
       ),
     );
   }
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(

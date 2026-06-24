@@ -16,6 +16,8 @@ class MatchesScreen extends StatefulWidget {
 class _MatchesScreenState extends State<MatchesScreen> {
   bool _isLoading = true;
   List<dynamic> _matches = [];
+  bool _hasUnreadNotifications = false; // Controls the red dot on the bell
+  
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
   final dio = Dio();
 
@@ -23,8 +25,31 @@ class _MatchesScreenState extends State<MatchesScreen> {
   void initState() {
     super.initState();
     _fetchMatches();
+    _checkUnreadNotifications(); // Check for likes/matches on load
   }
 
+  // 1. Fetches real notifications (Likes, Matches, System) to control the red dot
+  Future<void> _checkUnreadNotifications() async {
+    final myId = Supabase.instance.client.auth.currentUser?.id;
+    if (myId == null) return;
+    
+    try {
+      final response = await Supabase.instance.client
+          .from('notifications')
+          .select('id')
+          .eq('user_id', myId)
+          .eq('is_read', false)
+          .limit(1);
+
+      if (mounted && response is List) {
+        setState(() => _hasUnreadNotifications = response.isNotEmpty);
+      }
+    } catch (e) {
+      debugPrint("Error checking unread notifications: $e");
+    }
+  }
+
+  // 2. Fetches your actual matched profiles
   Future<void> _fetchMatches() async {
     try {
       final session = Supabase.instance.client.auth.currentSession;
@@ -48,7 +73,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: AppTheme.voidBackground, // FIX: Replaced deprecated colorScheme.background
       appBar: AppBar(
         title: Row(
           children: [
@@ -68,20 +93,26 @@ class _MatchesScreenState extends State<MatchesScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_none, color: Colors.white),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
+                onPressed: () async {
+                  // Wait for the user to return from the notifications screen
+                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+                  // Re-check the database to turn off the red dot if they read them
+                  _checkUnreadNotifications(); 
+                },
               ),
-              // THE RED DOT BADGE
-              Positioned(
-                top: 12, right: 12,
-                child: Container(
-                  width: 8, height: 8,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryRose, 
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.5), blurRadius: 4)]
+              // FIX: The red dot now only shows if the database says there are unread alerts
+              if (_hasUnreadNotifications)
+                Positioned(
+                  top: 12, right: 12,
+                  child: Container(
+                    width: 8, height: 8,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryRose, 
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.5), blurRadius: 4)]
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],
