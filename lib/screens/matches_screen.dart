@@ -63,9 +63,26 @@ class _MatchesScreenState extends State<MatchesScreen> {
         backgroundColor: colorScheme.surface,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: colorScheme.onSurface),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_none, color: Colors.white),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen())),
+              ),
+              // THE RED DOT BADGE
+              Positioned(
+                top: 12, right: 12,
+                child: Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryRose, 
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.5), blurRadius: 4)]
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

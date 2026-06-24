@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
+import '../widgets/premium_shimmer.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -11,8 +13,8 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  List<dynamic> _notifications = [];
   bool _isLoading = true;
+  List<Map<String, dynamic>> _notifications = [];
   final dio = Dio();
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
 
@@ -23,71 +25,177 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _fetchNotifications() async {
-    try {
-      final session = Supabase.instance.client.auth.currentSession;
-      final response = await dio.get('$apiUrl/notifications', options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}));
-      if (mounted) setState(() { _notifications = response.data; _isLoading = false; });
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+    // Simulating backend fetch with dummy data for UI testing until backend is ready
+    await Future.delayed(const Duration(milliseconds: 1200));
+    
+    if (mounted) {
+      setState(() {
+        _notifications = [
+          {
+            'id': '1', 'type': 'new_admirer', 'is_read': false,
+            'title': 'Someone has their eye on you.', 'body': 'Tap to reveal your secret admirer.',
+            'image': 'https://via.placeholder.com/150', 'time': '2m ago'
+          },
+          {
+            'id': '2', 'type': 'new_match', 'is_read': false,
+            'title': 'Alignment Secured!', 'body': 'You and Sarah just matched. Say hi!',
+            'image': 'https://via.placeholder.com/150', 'time': '1h ago'
+          },
+          {
+            'id': '3', 'type': 'system', 'is_read': true,
+            'title': 'Welcome to the Void', 'body': 'Your profile is live. Start swiping!',
+            'image': null, 'time': '1d ago'
+          }
+        ];
+        _isLoading = false;
+      });
     }
   }
 
-  Icon _getIconForType(String type, ColorScheme colorScheme) {
-    switch (type) {
-      case 'like': return const Icon(Icons.favorite, color: AppTheme.primaryRose);
-      case 'match': return const Icon(Icons.auto_awesome, color: AppTheme.electricCyan);
-      default: return Icon(Icons.info, color: colorScheme.primary);
-    }
+  void _markAllAsRead() {
+    setState(() {
+      for (var notif in _notifications) {
+        notif['is_read'] = true;
+      }
+    });
+    // TODO: Send DIO patch request to backend to mark as read
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: AppTheme.voidBackground,
       appBar: AppBar(
-        title: Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
-        backgroundColor: colorScheme.surface,
+        leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        title: const Text('NOTIFICATIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1.5, color: Colors.white)),
+        actions: [
+          if (_notifications.any((n) => n['is_read'] == false))
+            TextButton(
+              onPressed: _markAllAsRead,
+              child: const Text('MARK READ', style: TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+            )
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.electricCyan))
-          : _notifications.isEmpty
-              ? _buildEmptyState(colorScheme)
-              : ListView.separated(
-                  itemCount: _notifications.length,
-                  separatorBuilder: (context, index) => Divider(height: 1, color: colorScheme.onSurface.withValues(alpha: 0.1)),
-                  itemBuilder: (context, index) {
-                    final note = _notifications[index];
-                    final bool isRead = note['is_read'] ?? false;
-
-                    return Container(
-                      color: isRead ? colorScheme.surface : colorScheme.primary.withValues(alpha: 0.05),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: colorScheme.background,
-                          child: _getIconForType(note['type'], colorScheme),
-                        ),
-                        title: Text(note['title'], style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
-                        subtitle: Text(note['message'], style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7))),
-                      ),
-                    );
-                  },
-                ),
+      body: _isLoading 
+        ? _buildShimmer()
+        : _notifications.isEmpty 
+          ? _buildEmptyState()
+          : ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              itemCount: _notifications.length,
+              separatorBuilder: (context, index) => Divider(color: Colors.white.withValues(alpha: 0.05), height: 1),
+              itemBuilder: (context, index) => _buildNotificationTile(_notifications[index]),
+            ),
     );
   }
 
-  Widget _buildEmptyState(ColorScheme colorScheme) {
+  Widget _buildNotificationTile(Map<String, dynamic> notif) {
+    final bool isUnread = !notif['is_read'];
+    final bool isAdmirer = notif['type'] == 'new_admirer';
+    final bool isSystem = notif['type'] == 'system';
+
+    return InkWell(
+      onTap: () {
+        setState(() => notif['is_read'] = true);
+        if (isAdmirer) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock Premium to see admirers!')));
+        }
+      },
+      child: Container(
+        color: isUnread ? AppTheme.electricCyan.withValues(alpha: 0.05) : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Row(
+          children: [
+            // The Image or Icon Avatar
+            Container(
+              width: 50, height: 50,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.surfaceGlass, border: Border.all(color: Colors.white12)),
+              clipBehavior: Clip.antiAlias,
+              child: isSystem 
+                ? const Icon(Icons.info_outline, color: AppTheme.electricCyan)
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(notif['image'], fit: BoxFit.cover),
+                      if (isAdmirer) // Heavy blur for admirers
+                        BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                          child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.2)),
+                        ),
+                    ],
+                  ),
+            ),
+            const SizedBox(width: 16),
+            
+            // Text Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(notif['title'], style: TextStyle(color: Colors.white, fontWeight: isUnread ? FontWeight.w900 : FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text(notif['body'], style: TextStyle(color: AppTheme.textSecondary, fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal, fontSize: 14)),
+                  const SizedBox(height: 6),
+                  Text(notif['time'], style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 12)),
+                ],
+              ),
+            ),
+
+            // Unread Glowing Dot
+            if (isUnread)
+              Container(
+                width: 10, height: 10,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryRose,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.5), blurRadius: 8)],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.notifications_off_outlined, size: 80, color: colorScheme.onSurface.withValues(alpha: 0.2)),
-          const SizedBox(height: 16),
-          Text('All Caught Up', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
-          const SizedBox(height: 8),
-          Text('You have no new notifications right now.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
+          Icon(Icons.notifications_none, size: 80, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
+          const SizedBox(height: 24),
+          const Text('The Void is Quiet', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 12),
+          const Text('No new notifications right now.', style: TextStyle(color: AppTheme.textSecondary)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildShimmer() {
+    return PremiumShimmer(
+      child: ListView.builder(
+        itemCount: 6,
+        padding: const EdgeInsets.all(16),
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(bottom: 24.0),
+          child: Row(
+            children: [
+              const ShimmerBox(width: 50, height: 50, borderRadius: 25),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    ShimmerBox(width: 200, height: 16, borderRadius: 4),
+                    SizedBox(height: 8),
+                    ShimmerBox(width: 140, height: 12, borderRadius: 4),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

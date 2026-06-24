@@ -140,6 +140,31 @@ app.get('/pool', async (c) => {
   }
 });
 
+// --- ADD THIS TO YOUR index.ts ---
+app.get('/matches', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    // Fetching people who 'like'd the current user
+    const { data, error } = await supabase
+      .from('swipes')
+      .select('swiper_id, profiles!swipes_swiper_id_fkey(*)') 
+      .eq('swiped_id', user.id)
+      .eq('action', 'like');
+
+    if (error) throw error;
+    
+    // Map to just the profile objects
+    const admirers = data.map((d: any) => d.profiles).filter(Boolean);
+    return c.json(admirers);
+  } catch (e) {
+    console.error(e);
+    return c.json({ error: 'Failed to fetch admirers' }, 500);
+  }
+});
+
 // --- 3. THE SWIPE ROUTE (Updated with Notifications) ---
 app.post('/swipe', async (c) => {
   try {
