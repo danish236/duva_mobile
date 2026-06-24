@@ -428,4 +428,31 @@ app.post('/location', async (c) => {
   }
 });
 
+// --- REWIND ROUTE (Premium) ---
+app.post('/rewind', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    // Get the absolute last swipe they made
+    const { data: lastSwipe, error } = await supabase
+      .from('swipes')
+      .select('id')
+      .eq('swiper_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !lastSwipe) return c.json({ error: 'No swipes to rewind' }, 400);
+
+    // Delete it so the profile returns to the pool
+    await supabase.from('swipes').delete().eq('id', lastSwipe.id);
+
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: 'Rewind failed' }, 500);
+  }
+});
+
 export default app;
