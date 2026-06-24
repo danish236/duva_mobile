@@ -61,6 +61,7 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
+  bool _hasUnreadMessages = false;
   
   static const List<Widget> _pages = <Widget>[
     ExploreScreen(),
@@ -69,6 +70,31 @@ class _MainLayoutState extends State<MainLayout> {
     MatchesScreen(),
     ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUnreadStatus(); // This triggers the check as soon as the app loads
+  }
+
+  Future<void> _checkUnreadStatus() async {
+    final myId = Supabase.instance.client.auth.currentUser?.id;
+    if (myId == null) return;
+    
+    // Supabase returns a List<Map<String, dynamic>> directly
+    final List<dynamic> response = await Supabase.instance.client
+        .from('messages')
+        .select('id')
+        .eq('receiver_id', myId)
+        .eq('is_read', false)
+        .limit(1);
+
+    if (mounted) {
+      setState(() {
+        _hasUnreadMessages = response.isNotEmpty;
+      });
+    }
+  }
 
   void _onItemTapped(int index) {
     HapticFeedback.selectionClick();
@@ -123,7 +149,7 @@ class _MainLayoutState extends State<MainLayout> {
                     _buildNavItem(Icons.style_outlined, Icons.style, 0),
                     _buildNavItem(Icons.favorite_border, Icons.favorite, 1),
                     _buildPremiumNavItem(),
-                    _buildNavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 3),
+                    _buildNavItem(Icons.chat_bubble_outline, Icons.chat_bubble, 3, showBadge: _hasUnreadMessages),
                     _buildNavItem(Icons.person_outline, Icons.person, 4),
                   ],
                 ),
@@ -135,7 +161,8 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  Widget _buildNavItem(IconData outlineIcon, IconData filledIcon, int index) {
+  // Updated to accept 'showBadge'
+  Widget _buildNavItem(IconData outlineIcon, IconData filledIcon, int index, {bool showBadge = false}) {
     final isSelected = _selectedIndex == index;
     return GestureDetector(
       onTap: () => _onItemTapped(index),
@@ -144,10 +171,29 @@ class _MainLayoutState extends State<MainLayout> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutQuart,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Icon(
-          isSelected ? filledIcon : outlineIcon,
-          color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
-          size: isSelected ? 28 : 24, // Icon pops slightly when selected
+        child: Stack(
+          clipBehavior: Clip.none, // Allows the dot to float outside the icon
+          children: [
+            Icon(
+              isSelected ? filledIcon : outlineIcon,
+              color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+              size: isSelected ? 28 : 24,
+            ),
+            // THE GLOWING RED DOT
+            if (showBadge)
+              Positioned(
+                top: -2, right: -4,
+                child: Container(
+                  width: 10, height: 10,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryRose,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.surfaceGlass, width: 2),
+                    boxShadow: [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.6), blurRadius: 8)],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

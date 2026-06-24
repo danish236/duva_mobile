@@ -24,33 +24,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _fetchNotifications();
   }
 
-  Future<void> _fetchNotifications() async {
-    // Simulating backend fetch with dummy data for UI testing until backend is ready
-    await Future.delayed(const Duration(milliseconds: 1200));
+// Replace your _fetchNotifications with this:
+Future<void> _fetchNotifications() async {
+  try {
+    final session = Supabase.instance.client.auth.currentSession;
+    final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
+    
+    // Hitting your real backend
+    final response = await dio.get('$apiUrl/notifications', options: options);
     
     if (mounted) {
       setState(() {
-        _notifications = [
-          {
-            'id': '1', 'type': 'new_admirer', 'is_read': false,
-            'title': 'Someone has their eye on you.', 'body': 'Tap to reveal your secret admirer.',
-            'image': 'https://via.placeholder.com/150', 'time': '2m ago'
-          },
-          {
-            'id': '2', 'type': 'new_match', 'is_read': false,
-            'title': 'Alignment Secured!', 'body': 'You and Sarah just matched. Say hi!',
-            'image': 'https://via.placeholder.com/150', 'time': '1h ago'
-          },
-          {
-            'id': '3', 'type': 'system', 'is_read': true,
-            'title': 'Welcome to the Void', 'body': 'Your profile is live. Start swiping!',
-            'image': null, 'time': '1d ago'
-          }
-        ];
+        _notifications = List<Map<String, dynamic>>.from(response.data);
         _isLoading = false;
       });
     }
+  } catch (e) {
+    debugPrint("Backend Fetch Error: $e");
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   void _markAllAsRead() {
     setState(() {

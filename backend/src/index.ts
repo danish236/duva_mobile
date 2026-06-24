@@ -266,25 +266,36 @@ app.post('/messages/:match_id', async (c) => {
   }
 });
 
-// --- 6. FETCH NOTIFICATIONS ---
+// GET: Fetch real notifications from Supabase
 app.get('/notifications', async (c) => {
-  try {
-    const supabase = getSupabaseClient(c);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  const supabase = getSupabaseClient(c);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { data: notifications, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return c.json(notifications || []);
-  } catch (e) {
-    return c.json({ error: 'Failed to fetch notifications' }, 500);
-  }
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json(data);
+});
+
+// PATCH: Mark all as read
+app.patch('/notifications/read', async (c) => {
+  const supabase = getSupabaseClient(c);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', user.id)
+    .eq('is_read', false);
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ success: true });
 });
 
 // --- 7. SAVE PREFERENCES ---
