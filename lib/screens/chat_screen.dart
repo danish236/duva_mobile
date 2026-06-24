@@ -23,6 +23,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final Dio dio = Dio();
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  bool _isPremium = false;
   
   List<dynamic> _messages = [];
   Timer? _pollingTimer;
@@ -35,8 +36,14 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _myUserId = Supabase.instance.client.auth.currentUser?.id;
+    _fetchPremiumStatus();
     _fetchMessages();
     _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages(isPolling: true));
+  }
+
+  Future<void> _fetchPremiumStatus() async {
+    final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', _myUserId!).single();
+    if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
   }
 
   @override
@@ -161,7 +168,21 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                             boxShadow: isMe ? [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
                           ),
-                          child: Text(msg['content'], style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.end,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              Text(msg['content'], style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                              if (isMe && _isPremium) ...[
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.done_all, 
+                                  size: 16, 
+                                  color: msg['is_read'] == true ? AppTheme.electricCyan : Colors.white38
+                                ),
+                              ]
+                            ],
+                          ),
                         ),
                       );
                     },

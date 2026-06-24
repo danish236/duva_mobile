@@ -29,12 +29,14 @@ class ProfileData {
   final String? pets;
   final String? zodiac;
   final String? kids;
+  final bool isPremium;
 
   ProfileData({
     required this.id, required this.firstName, required this.lastName, required this.location, 
     this.bio, required this.dob, this.work, this.education, required this.images, 
     this.expectations, this.currentDateBid, required this.interests,
-    this.height, this.weight, this.smoking, this.drinking, this.workout, this.pets, this.zodiac, this.kids
+    this.height, this.weight, this.smoking, this.drinking, this.workout, this.pets, this.zodiac, this.kids,
+    this.isPremium = false,
   });
 
   int get age {
@@ -74,6 +76,7 @@ class ProfileData {
       pets: json['pets'],
       zodiac: json['zodiac'],
       kids: json['kids'],
+      isPremium: json['is_premium'] ?? false,
     );
   }
 }
@@ -201,7 +204,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
+                      if (profile.isPremium) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [BoxShadow(color: AppTheme.electricCyan.withValues(alpha: 0.3), blurRadius: 8)],
+                          ),
+                          child: const Text('BLACK', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                        ),
+                      ]
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   Row(children: [const Icon(Icons.location_on, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.location, style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))]),
                   if (_isValid(profile.work)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.work, size: 18, color: AppTheme.primaryRose), const SizedBox(width: 6), Text(profile.work!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
@@ -249,9 +269,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(tag['icon'] as IconData, size: 16, color: AppTheme.textSecondary),
+                              Icon(tag['icon'] as IconData, color: Colors.white70, size: 16),
                               const SizedBox(width: 8),
-                              Text(tag['value'] as String, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                              Text(tag['value'] as String, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                             ],
                           ),
                         );

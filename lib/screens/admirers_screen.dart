@@ -14,6 +14,7 @@ class AdmirersScreen extends StatefulWidget {
 
 class _AdmirersScreenState extends State<AdmirersScreen> {
   bool _isLoading = true;
+  bool _isPremium = false; // THE PRO LOCK
   List<dynamic> _admirers = [];
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
   final dio = Dio();
@@ -21,14 +22,20 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchAdmirers();
+    _fetchData();
   }
 
-  Future<void> _fetchAdmirers() async {
+  Future<void> _fetchData() async {
     try {
       final session = Supabase.instance.client.auth.currentSession;
       final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
-      // Assuming you will create this endpoint, falling back to /matches if it doesn't exist for now so UI doesn't crash
+      
+      // Fetch User's Premium Status
+      final myId = session?.user.id;
+      final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId!).single();
+      _isPremium = profile['is_premium'] ?? false;
+
+      // Fetch Admirers
       final response = await dio.get('$apiUrl/matches', options: options); 
       
       if (mounted) {
@@ -44,39 +51,44 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-              child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: AppTheme.voidBackground,
+        appBar: _buildAppBar(),
+        body: PremiumShimmer(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.75
             ),
-            const SizedBox(width: 12),
-            const Text('ADMIRERS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
-          ],
+            itemCount: 6, 
+            itemBuilder: (context, index) => const ShimmerBox(width: double.infinity, height: double.infinity, borderRadius: 24),
+          ),
         ),
-        actions: [
-          IconButton(icon: const Icon(Icons.auto_awesome), onPressed: () {}), // Premium upgrade trigger later
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppTheme.voidBackground,
+      appBar: _buildAppBar(),
+      body: _admirers.isEmpty ? _buildEmptyState() : _buildGrid(),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: Row(
+        children: [
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
+            child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
+          ),
+          const SizedBox(width: 12),
+          const Text('ADMIRERS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
         ],
       ),
-      body: _isLoading 
-        ? PremiumShimmer(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, 
-                crossAxisSpacing: 16, 
-                mainAxisSpacing: 16, 
-                childAspectRatio: 0.75
-              ),
-              itemCount: 6, // Show 6 ghosted grid items
-              itemBuilder: (context, index) => const ShimmerBox(width: double.infinity, height: double.infinity, borderRadius: 24),
-            ),
-          )
-        : _admirers.isEmpty 
-          ? _buildEmptyState() 
-          : _buildGrid(),
+      backgroundColor: AppTheme.surfaceGlass,
+      elevation: 0,
     );
   }
 
@@ -87,7 +99,7 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
         children: [
           Icon(Icons.favorite_border, size: 80, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
           const SizedBox(height: 24),
-          const Text('No Admirers Yet', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const Text('No Admirers Yet', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 12),
           const Text('Keep swiping. Your alignments are out there.', style: TextStyle(color: AppTheme.textSecondary)),
         ],
@@ -98,38 +110,37 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
   Widget _buildGrid() {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          width: double.infinity,
-          decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.1)),
-          child: Column(
-            children: [
-              const Text('Upgrade to Premium', style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-              const SizedBox(height: 4),
-              Text('See who already liked you and match instantly.', style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.8), fontSize: 13)),
-            ],
+        if (!_isPremium)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            width: double.infinity,
+            decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.1)),
+            child: Column(
+              children: [
+                const Text('Upgrade to Duva Black', style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                const SizedBox(height: 4),
+                Text('See who already liked you and match instantly.', style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.8), fontSize: 13)),
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: GridView.builder(
             padding: const EdgeInsets.all(16),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, 
-              crossAxisSpacing: 16, 
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.75
+              crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.75
             ),
             itemCount: _admirers.length,
             itemBuilder: (context, index) {
               final admirer = _admirers[index];
-              final String imageUrl = (admirer['images'] != null && admirer['images'].isNotEmpty) 
-                  ? admirer['images'][0] 
-                  : 'https://via.placeholder.com/400';
+              final String imageUrl = (admirer['images'] != null && admirer['images'].isNotEmpty) ? admirer['images'][0] : 'https://via.placeholder.com/400';
 
               return GestureDetector(
                 onTap: () {
-                  // Trigger premium paywall modal here in the future
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock Premium to reveal!')));
+                  if (!_isPremium) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock Duva Black to reveal!')));
+                  } else {
+                    // TODO: Navigate to their profile
+                  }
                 },
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
@@ -138,31 +149,28 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
                     children: [
                       Image.network(imageUrl, fit: BoxFit.cover),
                       
-                      // THE HEAVY BLUR EFFECT
-                      BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                        child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.2)),
-                      ),
+                      // THE PAYWALL BLUR
+                      if (!_isPremium)
+                        BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.2)),
+                        ),
                       
-                      // GRADIENT OVERLAY
                       Container(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [AppTheme.voidBackground, AppTheme.voidBackground.withValues(alpha: 0)],
-                          ),
+                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [AppTheme.voidBackground, AppTheme.voidBackground.withValues(alpha: 0)]),
                         ),
                       ),
                       
-                      // LOCK ICON
-                      const Center(
-                        child: CircleAvatar(
-                          backgroundColor: Colors.white24,
-                          radius: 30,
-                          child: Icon(Icons.lock_outline, color: Colors.white, size: 28),
-                        ),
-                      ),
+                      if (!_isPremium)
+                        const Center(child: CircleAvatar(backgroundColor: Colors.white24, radius: 30, child: Icon(Icons.lock_outline, color: Colors.white, size: 28))),
+                      
+                      // IF PREMIUM, SHOW THEIR NAME
+                      if (_isPremium)
+                        Positioned(
+                          bottom: 12, left: 12, right: 12,
+                          child: Text(admirer['first_name'] ?? 'Secret', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        )
                     ],
                   ),
                 ),

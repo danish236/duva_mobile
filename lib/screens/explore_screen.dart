@@ -24,8 +24,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
   
   List<MatchProfile> _potentialMatches = [];
   bool _isLoading = true;
+  bool _isPremium = false;
   final dio = Dio();
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  
+
+  Future<void> _triggerRewind() async {
+    if (!_isPremium) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind alignments!')));
+      return;
+    }
+    
+    // Call the swiper package's native undo mechanism
+    _swiperController.undo();
+    
+    // Tell the backend to delete the mistake
+    try {
+      final options = await _getSecureOptions();
+      await dio.post('$apiUrl/rewind', options: options);
+    } catch (e) {
+      debugPrint("Rewind Backend Sync Failed");
+    }
+  }
 
   @override
   void initState() {
@@ -39,6 +59,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _initLocationAndPool() async {
+    final myId = Supabase.instance.client.auth.currentUser?.id;
+    if (myId != null) {
+      final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId).single();
+      if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
+    }
     await _updateUserLocation();
     await _fetchPool();
   }
@@ -231,6 +256,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                _buildGlassButton(Icons.replay, Colors.amber, _triggerRewind, size: 50),
+                const SizedBox(width: 24),
                 _buildGlassButton(Icons.close, Colors.white, () => _swiperController.swipe(CardSwiperDirection.left)),
                 const SizedBox(width: 32),
                 _buildGlassButton(Icons.favorite, AppTheme.primaryRose, () => _swiperController.swipe(CardSwiperDirection.right)),
