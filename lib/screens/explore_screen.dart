@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../theme.dart'; 
 import '../widgets/premium_shimmer.dart';
+import 'package:flutter/services.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -107,6 +108,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _executeSwipeBackend(bool isLike, String profileId) async {
+    HapticFeedback.heavyImpact();
     try {
       final options = await _getSecureOptions();
       final response = await dio.post('$apiUrl/swipe', data: {'swiped_id': profileId, 'action': isLike ? 'like' : 'pass'}, options: options);
@@ -319,6 +321,8 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
 
   void _handleTap(TapUpDetails details) {
     if (widget.profile.images.isEmpty) return;
+
+    HapticFeedback.lightImpact();
 
     final double screenWidth = MediaQuery.of(context).size.width;
     final double tapPosition = details.globalPosition.dx;

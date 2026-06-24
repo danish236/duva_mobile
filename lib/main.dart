@@ -12,6 +12,7 @@ import 'screens/login_screen.dart';
 
 import 'theme.dart';
 import 'theme_notifier.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,6 +71,7 @@ class _MainLayoutState extends State<MainLayout> {
   ];
 
   void _onItemTapped(int index) {
+    HapticFeedback.selectionClick();
     setState(() {
       _selectedIndex = index;
     });

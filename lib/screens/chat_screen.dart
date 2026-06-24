@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 
+import 'package:flutter/services.dart';
+
 class ChatScreen extends StatefulWidget {
   final String matchId;
   final String matchName;
@@ -70,6 +72,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
+
+    HapticFeedback.mediumImpact();
     
     setState(() {
       _messages.add({'sender_id': _myUserId, 'content': text, 'created_at': DateTime.now().toIso8601String()});
