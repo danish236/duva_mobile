@@ -10,7 +10,7 @@ import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // FIXED MISSING IMPORT
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -22,7 +22,7 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   final CardSwiperController _swiperController = CardSwiperController();
   
-  final List<MatchProfile> _potentialMatches = []; // Made final to fix lint
+  final List<MatchProfile> _potentialMatches = [];
   bool _isLoading = true;
   bool _isPremium = false;
   int _currentPage = 0;
@@ -101,11 +101,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-Future<void> _fetchPool() async {
-    // 1. Guard clause: Exit if there's no more data OR if we are already fetching
+  Future<void> _fetchPool() async {
     if (!_hasMore || _isFetchingMore) return; 
 
-    // 2. Lock the fetch so duplicate requests can't start
     setState(() {
       _isFetchingMore = true; 
     });
@@ -127,7 +125,6 @@ Future<void> _fetchPool() async {
         _isLoading = false;
       });
 
-      // Precache the first few images
       for (int i = 0; i < 3 && i < _potentialMatches.length; i++) {
         if (_potentialMatches[i].images.isNotEmpty) {
           precacheImage(CachedNetworkImageProvider(_potentialMatches[i].images.first), context);
@@ -140,7 +137,6 @@ Future<void> _fetchPool() async {
         });
       }
     } finally {
-      // 3. Release the lock no matter what happens (success or error)
       if (mounted) {
         setState(() {
           _isFetchingMore = false;
@@ -148,6 +144,7 @@ Future<void> _fetchPool() async {
       }
     }
   }
+
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final profileId = _potentialMatches[previousIndex].id;
     
@@ -186,6 +183,114 @@ Future<void> _fetchPool() async {
       }
     } catch (e) {
       debugPrint("Swipe Network Error: $e");
+    }
+  }
+
+  // --- MODERATION LOGIC ---
+
+  void _showModerationOptions(MatchProfile profile) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900], 
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(margin: const EdgeInsets.symmetric(vertical: 12), height: 4, width: 40, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              ListTile(
+                leading: const Icon(Icons.block, color: Colors.white),
+                title: Text('Unmatch & Block ${profile.firstName}', style: const TextStyle(color: Colors.white)),
+                subtitle: const Text('They won\'t know you blocked them.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _executeModerationAction('block', profile.id, null);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.flag, color: AppTheme.primaryRose),
+                title: Text('Report ${profile.firstName}', style: const TextStyle(color: AppTheme.primaryRose)),
+                subtitle: const Text('Report inappropriate behavior or fake profiles.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _fetchAndShowReportReasons(profile);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  Future<void> _fetchAndShowReportReasons(MatchProfile profile) async {
+    try {
+      final options = await _getSecureOptions();
+      final response = await dio.get('$apiUrl/reasons?type=report', options: options);
+      final List reasons = response.data;
+
+      if (!mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.grey[900],
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (context) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(margin: const EdgeInsets.symmetric(vertical: 12), height: 4, width: 40, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('Why are you reporting this profile?', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  ...reasons.map((reason) => ListTile(
+                    title: Text(reason['reason'], style: const TextStyle(color: Colors.white70)),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _executeModerationAction('report', profile.id, reason['id']);
+                    },
+                  )),
+                ],
+              ),
+            ),
+          );
+        }
+      );
+    } catch (e) {
+      debugPrint('Failed to load reasons: $e');
+    }
+  }
+
+  Future<void> _executeModerationAction(String action, String targetId, int? reasonId) async {
+    // Instantly swipe them left
+    _swiperController.swipe(CardSwiperDirection.left);
+    
+    try {
+      final options = await _getSecureOptions();
+      final endpoint = action == 'report' ? '/report' : '/block';
+      
+      await dio.post(
+        '$apiUrl$endpoint', 
+        data: action == 'report' ? {'reported_id': targetId, 'reason_id': reasonId} : {'blocked_id': targetId, 'reason_id': 1}, 
+        options: options
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Profile removed securely.'),
+          backgroundColor: Colors.black87,
+        ));
+      }
+    } catch (e) {
+      debugPrint('Moderation API failed: $e');
     }
   }
 
@@ -277,6 +382,8 @@ Future<void> _fetchPool() async {
               return CinematicProfileCard(
                 profile: _potentialMatches[index],
                 swipeProgress: horizontalThresholdPercentage, 
+                // ✅ Added the callback connection here
+                onMoreTap: () => _showModerationOptions(_potentialMatches[index]),
               );
             },
           ),
@@ -333,7 +440,6 @@ Future<void> _fetchPool() async {
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
-        // Replaced backdrop filter with semi-transparent background to remove dart:ui dependency
         child: Container(
           width: size, height: size,
           decoration: BoxDecoration(
@@ -357,11 +463,13 @@ Future<void> _fetchPool() async {
 class CinematicProfileCard extends StatefulWidget {
   final MatchProfile profile;
   final int swipeProgress; 
+  final VoidCallback onMoreTap; 
 
   const CinematicProfileCard({
     super.key,
     required this.profile,
     required this.swipeProgress,
+    required this.onMoreTap, 
   });
 
   @override
@@ -426,6 +534,15 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
               colors: [Colors.black, Colors.black87, Colors.transparent, Colors.transparent],
               stops: [0.0, 0.4, 0.6, 1.0]
             ),
+          ),
+        ),
+
+        // ✅ The Three Dots Menu Icon added here
+        Positioned(
+          top: 50, right: 16,
+          child: IconButton(
+            icon: const Icon(Icons.more_vert, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 10)]),
+            onPressed: widget.onMoreTap,
           ),
         ),
 
@@ -498,7 +615,6 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                 if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    // Removed dart:ui filter for simple semi-transparent block to resolve import unused lint
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.8), border: Border.all(color: AppTheme.primaryRose)),
