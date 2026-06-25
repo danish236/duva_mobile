@@ -27,6 +27,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _isPremium = false;
   int _currentPage = 0;
   bool _hasMore = true;
+  bool _isFetchingMore = false;
   final dio = Dio();
   final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
   
@@ -100,8 +101,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  Future<void> _fetchPool() async {
-    if (!_hasMore) return; 
+Future<void> _fetchPool() async {
+    // 1. Guard clause: Exit if there's no more data OR if we are already fetching
+    if (!_hasMore || _isFetchingMore) return; 
+
+    // 2. Lock the fetch so duplicate requests can't start
+    setState(() {
+      _isFetchingMore = true; 
+    });
 
     try {
       final options = await _getSecureOptions();
@@ -120,6 +127,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         _isLoading = false;
       });
 
+      // Precache the first few images
       for (int i = 0; i < 3 && i < _potentialMatches.length; i++) {
         if (_potentialMatches[i].images.isNotEmpty) {
           precacheImage(CachedNetworkImageProvider(_potentialMatches[i].images.first), context);
@@ -131,9 +139,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
           _isLoading = false;
         });
       }
+    } finally {
+      // 3. Release the lock no matter what happens (success or error)
+      if (mounted) {
+        setState(() {
+          _isFetchingMore = false;
+        });
+      }
     }
   }
-
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final profileId = _potentialMatches[previousIndex].id;
     

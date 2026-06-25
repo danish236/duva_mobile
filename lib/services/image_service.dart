@@ -31,6 +31,10 @@ class ImageService {
     final dio = dio_pkg.Dio();
     final session = Supabase.instance.client.auth.currentSession;
 
+    if (session == null || session.accessToken == null) {
+      throw Exception('User is not authenticated. Cannot upload image.');
+    }
+
     // Use the alias for FormData and MultipartFile
     dio_pkg.FormData formData = dio_pkg.FormData.fromMap({
       'image': await dio_pkg.MultipartFile.fromFile(
@@ -44,7 +48,7 @@ class ImageService {
       data: formData,
       // Use the alias for Options
       options: dio_pkg.Options(
-        headers: {'Authorization': 'Bearer ${session?.accessToken}'}
+        headers: {'Authorization': 'Bearer ${session.accessToken}'} // Safe to use directly now
       ),
     );
 
