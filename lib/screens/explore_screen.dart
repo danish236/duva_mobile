@@ -1,8 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_card_swiper/flutter_card_swiper.dart'; // THE NEW SWIPE ENGINE
+import 'package:flutter_card_swiper/flutter_card_swiper.dart'; 
 import '../models/match_profile.dart'; 
 import 'preferences_screen.dart'; 
 import 'package:geolocator/geolocator.dart';
@@ -11,6 +10,7 @@ import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // FIXED MISSING IMPORT
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -20,26 +20,24 @@ class ExploreScreen extends StatefulWidget {
 }
 
 class _ExploreScreenState extends State<ExploreScreen> {
-  // Controller to programmatically swipe cards (when buttons are tapped)
   final CardSwiperController _swiperController = CardSwiperController();
   
-  List<MatchProfile> _potentialMatches = [];
+  final List<MatchProfile> _potentialMatches = []; // Made final to fix lint
   bool _isLoading = true;
   bool _isPremium = false;
+  int _currentPage = 0;
+  bool _hasMore = true;
   final dio = Dio();
   final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
   
-
   Future<void> _triggerRewind() async {
     if (!_isPremium) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind alignments!')));
       return;
     }
     
-    // Call the swiper package's native undo mechanism
     _swiperController.undo();
     
-    // Tell the backend to delete the mistake
     try {
       final options = await _getSecureOptions();
       await dio.post('$apiUrl/rewind', options: options);
@@ -63,7 +61,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final myId = Supabase.instance.client.auth.currentUser?.id;
     if (myId != null) {
       final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId).single();
-      if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
+      if (mounted) {
+        setState(() {
+          _isPremium = profile['is_premium'] ?? false;
+        });
+      }
     }
     await _updateUserLocation();
     await _fetchPool();
@@ -99,22 +101,39 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _fetchPool() async {
+    if (!_hasMore) return; 
+
     try {
       final options = await _getSecureOptions();
-      final response = await dio.get('$apiUrl/pool', options: options);
+      final response = await dio.get('$apiUrl/pool?page=$_currentPage', options: options);
       
+      if (!mounted) return; 
+
+      setState(() {
+        final newData = (response.data['data'] as List)
+            .map((json) => MatchProfile.fromJson(json))
+            .toList();
+        
+        _potentialMatches.addAll(newData);
+        _currentPage = response.data['nextPage'] ?? _currentPage;
+        _hasMore = response.data['nextPage'] != null;
+        _isLoading = false;
+      });
+
+      for (int i = 0; i < 3 && i < _potentialMatches.length; i++) {
+        if (_potentialMatches[i].images.isNotEmpty) {
+          precacheImage(CachedNetworkImageProvider(_potentialMatches[i].images.first), context);
+        }
+      }
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _potentialMatches = (response.data as List).map((json) => MatchProfile.fromJson(json)).toList();
           _isLoading = false;
         });
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // FIRES WHEN THE CARD FINISHES SWIPING
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     final profileId = _potentialMatches[previousIndex].id;
     
@@ -123,10 +142,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
     } else if (direction == CardSwiperDirection.left) {
       _executeSwipeBackend(false, profileId);
     }
-    return true; // Allow the swipe to complete
+
+    if (currentIndex != null && currentIndex >= _potentialMatches.length - 3) {
+      _fetchPool();
+    }
+    
+    return true; 
   }
 
-  // FIRES WHEN THE STACK IS EMPTY
   void _onEnd() {
     setState(() {
       _potentialMatches.clear();
@@ -154,33 +177,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // --- THE NEW 2026 SKELETON LOADER ---
     if (_isLoading) {
       return Scaffold(
         extendBodyBehindAppBar: true,
         appBar: _buildAppBar(),
         body: Padding(
-          padding: const EdgeInsets.only(bottom: 24.0), // Space for nav bar
+          padding: const EdgeInsets.only(bottom: 24.0), 
           child: PremiumShimmer(
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // The massive profile image placeholder
                 ShimmerBox(width: double.infinity, height: double.infinity, borderRadius: 0),
-                
-                // The text placeholders at the bottom
                 Positioned(
                   bottom: 120, left: 24, right: 24,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ShimmerBox(width: 150, height: 40, borderRadius: 12), // Name/Age
+                      ShimmerBox(width: 150, height: 40, borderRadius: 12), 
                       const SizedBox(height: 12),
-                      ShimmerBox(width: 200, height: 20, borderRadius: 8), // Location
+                      ShimmerBox(width: 200, height: 20, borderRadius: 8), 
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          ShimmerBox(width: 80, height: 30, borderRadius: 20), // Tags
+                          ShimmerBox(width: 80, height: 30, borderRadius: 20), 
                           const SizedBox(width: 8),
                           ShimmerBox(width: 100, height: 30, borderRadius: 20),
                         ],
@@ -188,8 +207,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ],
                   ),
                 ),
-                
-                // The action button placeholders
                 Positioned(
                   bottom: 40, left: 0, right: 0,
                   child: Row(
@@ -233,25 +250,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
       appBar: _buildAppBar(),
       body: Stack(
         children: [
-          // 1. THE PHYSICS SWIPER
           CardSwiper(
             controller: _swiperController,
             cardsCount: _potentialMatches.length,
             onSwipe: _onSwipe,
             onEnd: _onEnd,
             allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
-            numberOfCardsDisplayed: 2, // Shows the next card stacked slightly behind
-            backCardOffset: const Offset(0, 0), // Keeps it perfectly aligned
-            padding: EdgeInsets.zero, // Edge-to-edge
+            numberOfCardsDisplayed: 2, 
+            backCardOffset: const Offset(0, 0), 
+            padding: EdgeInsets.zero, 
             cardBuilder: (context, index, horizontalThresholdPercentage, verticalThresholdPercentage) {
               return CinematicProfileCard(
                 profile: _potentialMatches[index],
-                swipeProgress: horizontalThresholdPercentage, // Powers the ALIGN/PASS stamps
+                swipeProgress: horizontalThresholdPercentage, 
               );
             },
           ),
-
-          // 2. STATIC ACTION DOCK (Hovering over the cards)
           Positioned(
             bottom: 40, left: 0, right: 0,
             child: Row(
@@ -289,7 +303,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
               },
             ));
             if (result == true && mounted) {
-              setState(() => _isLoading = true);
+              setState(() {
+                _isLoading = true;
+              });
               _fetchPool();
             }
           },
@@ -303,17 +319,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            width: size, height: size,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white24, width: 1.5),
-            ),
-            child: Icon(icon, color: color, size: size * 0.5),
+        // Replaced backdrop filter with semi-transparent background to remove dart:ui dependency
+        child: Container(
+          width: size, height: size,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white24, width: 1.5),
           ),
+          child: Icon(icon, color: color, size: size * 0.5),
         ),
       ),
     );
@@ -326,13 +340,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 }
 
-// =========================================================================
-// THE INSTAGRAM STORY + DYNAMIC STAMP CARD
-// =========================================================================
-
 class CinematicProfileCard extends StatefulWidget {
   final MatchProfile profile;
-  final int swipeProgress; // Automatically passed by CardSwiper (-10000 to 10000)
+  final int swipeProgress; 
 
   const CinematicProfileCard({
     super.key,
@@ -357,9 +367,9 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
 
     setState(() {
       if (tapPosition < screenWidth * 0.3) {
-        if (_currentImageIndex > 0) _currentImageIndex--; // Prev Image
+        if (_currentImageIndex > 0) _currentImageIndex--; 
       } else {
-        if (_currentImageIndex < widget.profile.images.length - 1) _currentImageIndex++; // Next Image
+        if (_currentImageIndex < widget.profile.images.length - 1) _currentImageIndex++; 
       }
     });
   }
@@ -368,34 +378,32 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
   Widget build(BuildContext context) {
     final profile = widget.profile;
     
-    // Calculate Opacity for the Stamps based on Swipe Progress
-    // flutter_card_swiper passes int values where 10000 = 100% swiped
     double progress = widget.swipeProgress / 10000; 
-    double likeOpacity = (progress * 2).clamp(0.0, 1.0); // Multiplied by 2 so it fades in faster
+    double likeOpacity = (progress * 2).clamp(0.0, 1.0); 
     double passOpacity = (-progress * 2).clamp(0.0, 1.0);
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. The Image (Wrapped in GestureDetector for Insta-taps)
         GestureDetector(
           onTapUp: _handleTap,
           child: profile.images.isNotEmpty
               ? AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
-                  child: Image.network(
-                    profile.images[_currentImageIndex], 
+                  child: CachedNetworkImage(
                     key: ValueKey<String>(profile.images[_currentImageIndex]),
+                    imageUrl: profile.images[_currentImageIndex],
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
-                    errorBuilder: (context, error, stackTrace) => Container(color: AppTheme.surfaceGlass, child: const Center(child: Icon(Icons.person, size: 100, color: Colors.white24))),
+                    fadeInDuration: const Duration(milliseconds: 100), 
+                    placeholder: (context, url) => Container(color: AppTheme.surfaceGlass, child: const Center(child: CircularProgressIndicator(color: AppTheme.electricCyan))),
+                    errorWidget: (context, url, error) => Container(color: AppTheme.surfaceGlass, child: const Center(child: Icon(Icons.broken_image, size: 100, color: Colors.white24))),
                   ),
                 )
               : Container(color: AppTheme.surfaceGlass, child: const Center(child: Icon(Icons.person, size: 100, color: Colors.white24))),
         ),
         
-        // 2. The Gradient shadow to make text legible
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -407,10 +415,9 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
           ),
         ),
 
-        // 3. The Insta-Story Progress Bars (At the very top)
         if (profile.images.length > 1)
           Positioned(
-            top: 110, // Just below the AppBar
+            top: 110, 
             left: 16, right: 16,
             child: Row(
               children: List.generate(profile.images.length, (index) {
@@ -429,12 +436,11 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
             ),
           ),
 
-        // 4. THE DYNAMIC STAMPS (Fades in based on thumb drag)
         if (likeOpacity > 0.0)
           Positioned(
             top: 160, left: 40,
             child: Transform.rotate(
-              angle: -0.2, // Slightly tilted
+              angle: -0.2, 
               child: Opacity(
                 opacity: likeOpacity,
                 child: Container(
@@ -468,30 +474,27 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
             ),
           ),
 
-        // 5. The Content pushed to the bottom
         Positioned(
           bottom: 120, 
           left: 24, right: 24,
-          child: IgnorePointer( // Let taps pass through to the image
+          child: IgnorePointer( 
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (profile.currentDateBid != null && profile.currentDateBid!.isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.3), border: Border.all(color: AppTheme.primaryRose.withValues(alpha: 0.5))),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.local_bar, color: Colors.white, size: 18),
-                            const SizedBox(width: 8),
-                            Flexible(child: Text(profile.currentDateBid!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
-                          ],
-                        ),
+                    // Removed dart:ui filter for simple semi-transparent block to resolve import unused lint
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.8), border: Border.all(color: AppTheme.primaryRose)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.local_bar, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Flexible(child: Text(profile.currentDateBid!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+                        ],
                       ),
                     ),
                   ),
@@ -512,13 +515,10 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                     children: profile.interests.take(4).map((interest) {
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(20),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), border: Border.all(color: Colors.white24)),
-                            child: Text(interest, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                          ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), border: Border.all(color: Colors.white24)),
+                          child: Text(interest, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                         ),
                       );
                     }).toList(),

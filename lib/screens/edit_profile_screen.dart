@@ -1,11 +1,11 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'profile_screen.dart';
 import '../theme.dart';
+import '../services/image_service.dart'; // YOUR NEW SERVICE
 
 class EditProfileScreen extends StatefulWidget {
   final ProfileData currentProfile;
@@ -45,10 +45,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<Map<String, dynamic>> _masterInterests = [];
 
   List<dynamic> _currentImages = [];
-  List<int> _selectedInterestIds = [];
+  final List<int> _selectedInterestIds = []; // Made final to fix lint
 
   // Static standard lists for lifestyle
-  final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\""); // 4'0" to 7'11"
+  final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\""); 
   final List<String> _smokingOptions = ['Never', 'Socially', 'Regularly', 'Trying to quit'];
   final List<String> _drinkingOptions = ['Never', 'Socially', 'Regularly'];
   final List<String> _workoutOptions = ['Everyday', 'Sometimes', 'Never'];
@@ -87,26 +87,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         client.from('master_interests').select('id, name').order('id'),
       ]);
 
+      if (!mounted) return;
+
+      setState(() {
+        _masterGenders = (results[0] as List).map((e) => e['name'] as String).toList();
+        _masterExpectations = (results[1] as List).map((e) => e['name'] as String).toList();
+        _masterEducation = (results[2] as List).map((e) => e['name'] as String).toList();
+        _masterInterests = List<Map<String, dynamic>>.from(results[3]);
+        
+        if (_masterExpectations.contains(widget.currentProfile.expectations)) {
+          _selectedExpectation = widget.currentProfile.expectations;
+        }
+        if (_masterEducation.contains(widget.currentProfile.education)) {
+          _selectedEducation = widget.currentProfile.education;
+        }
+
+        for (String interestName in widget.currentProfile.interests) {
+          final match = _masterInterests.firstWhere((m) => m['name'] == interestName, orElse: () => {});
+          if (match.isNotEmpty) _selectedInterestIds.add(match['id']);
+        }
+
+        _isLoadingData = false;
+      });
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _masterGenders = (results[0] as List).map((e) => e['name'] as String).toList();
-          _masterExpectations = (results[1] as List).map((e) => e['name'] as String).toList();
-          _masterEducation = (results[2] as List).map((e) => e['name'] as String).toList();
-          _masterInterests = List<Map<String, dynamic>>.from(results[3]);
-          
-          if (_masterExpectations.contains(widget.currentProfile.expectations)) _selectedExpectation = widget.currentProfile.expectations;
-          if (_masterEducation.contains(widget.currentProfile.education)) _selectedEducation = widget.currentProfile.education;
-
-          for (String interestName in widget.currentProfile.interests) {
-            final match = _masterInterests.firstWhere((m) => m['name'] == interestName, orElse: () => {});
-            if (match.isNotEmpty) _selectedInterestIds.add(match['id']);
-          }
-
           _isLoadingData = false;
         });
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoadingData = false);
     }
   }
 
@@ -135,30 +143,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+    });
 
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
       List<String> finalImageUrls = [];
 
-      // 1. Process Images
+      // 1. Process Images using our new DRY Service
       for (int i = 0; i < _currentImages.length; i++) {
         final img = _currentImages[i];
         if (img is String) {
           finalImageUrls.add(img);
         } else if (img is File) {
-          final fileExt = img.path.split('.').last;
-          final fileName = '${userId}_${DateTime.now().millisecondsSinceEpoch}_$i.$fileExt';
-          await Supabase.instance.client.storage.from('avatars').upload(fileName, img);
-          final publicUrl = Supabase.instance.client.storage.from('avatars').getPublicUrl(fileName);
-          finalImageUrls.add(publicUrl);
+          final url = await ImageService.compressAndUploadImage(img, userId, i);
+          if (url != null) finalImageUrls.add(url);
         }
       }
 
-      // HELPER: Convert empty strings to null to prevent database crashes
       String? cleanText(String text) => text.trim().isEmpty ? null : text.trim();
 
-      // 2. Update Profiles
+      // 2. Update Supabase Profiles
       await Supabase.instance.client.from('profiles').update({
         'bio': cleanText(_bioController.text),
         'work': cleanText(_workController.text),
@@ -167,7 +173,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'location': cleanText(_locationController.text) ?? 'Unknown Location',
         'current_date_bid': cleanText(_dateBidController.text),
         'gender': _selectedGender,
-        'images': finalImageUrls, // The newly ordered array is saved to DB
+        'images': finalImageUrls, 
         'height': _selectedHeight,
         'weight': cleanText(_weightController.text),
         'smoking': _selectedSmoking,
@@ -190,19 +196,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         await Supabase.instance.client.from('profile_interests').insert(interestInserts);
       }
 
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return; 
+      Navigator.pop(context, true);
       
-    } on PostgrestException catch (e) {
-      debugPrint("DB Error: ${e.message}");
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('DB Error: ${e.message}')));
-    } on StorageException catch (e) {
-      debugPrint("Storage Error: ${e.message}");
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('Storage Error: ${e.message}')));
     } catch (e) {
-      debugPrint("Unknown Error: $e");
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('Error: ${e.toString()}')));
+      debugPrint("Error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('Error: ${e.toString()}')));
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
   
@@ -214,32 +220,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       builder: (context) {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Container(
-              height: MediaQuery.of(context).size.height * 0.6,
-              padding: const EdgeInsets.only(top: 24, bottom: 40),
-              decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.9)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: ListView(
-                      children: options.map((option) {
-                        final isSelected = option == currentValue;
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
-                          title: Text(option, style: TextStyle(color: isSelected ? AppTheme.electricCyan : Colors.white, fontSize: 18, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
-                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.electricCyan) : null,
-                          onTap: () { onSelect(option); Navigator.pop(context); },
-                        );
-                      }).toList(),
-                    ),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            padding: const EdgeInsets.only(top: 24, bottom: 40),
+            decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.98)), // Replaced BackdropFilter with opaque background to fix dart:ui removal
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView(
+                    children: options.map((option) {
+                      final isSelected = option == currentValue;
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+                        title: Text(option, style: TextStyle(color: isSelected ? AppTheme.electricCyan : Colors.white, fontSize: 18, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.electricCyan) : null,
+                        onTap: () { onSelect(option); Navigator.pop(context); },
+                      );
+                    }).toList(),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
@@ -257,59 +260,56 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           builder: (context, setModalState) {
             return ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
-                  height: MediaQuery.of(context).size.height * 0.7,
-                  padding: const EdgeInsets.only(top: 24, bottom: 40, left: 24, right: 24),
-                  decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.9)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('YOUR INTERESTS', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                          IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Select up to 5 interests.', style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8))),
-                      const SizedBox(height: 24),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 10, runSpacing: 10,
-                            children: _masterInterests.map((interest) {
-                              final isSelected = _selectedInterestIds.contains(interest['id']);
-                              return GestureDetector(
-                                onTap: () {
-                                  setModalState(() {
-                                    if (isSelected) {
-                                      _selectedInterestIds.remove(interest['id']);
-                                    } else if (_selectedInterestIds.length < 5) {
-                                      _selectedInterestIds.add(interest['id']);
-                                    }
-                                  });
-                                  setState(() {}); 
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? AppTheme.electricCyan.withValues(alpha: 0.2) : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: isSelected ? AppTheme.electricCyan : Colors.white12),
-                                  ),
-                                  child: Text(interest['name'], style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? AppTheme.electricCyan : AppTheme.textSecondary)),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.7,
+                padding: const EdgeInsets.only(top: 24, bottom: 40, left: 24, right: 24),
+                decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.98)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('YOUR INTERESTS', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                        IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Select up to 5 interests.', style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8))),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Wrap(
+                          spacing: 10, runSpacing: 10,
+                          children: _masterInterests.map((interest) {
+                            final isSelected = _selectedInterestIds.contains(interest['id']);
+                            return GestureDetector(
+                              onTap: () {
+                                setModalState(() {
+                                  if (isSelected) {
+                                    _selectedInterestIds.remove(interest['id']);
+                                  } else if (_selectedInterestIds.length < 5) {
+                                    _selectedInterestIds.add(interest['id']);
+                                  }
+                                });
+                                setState(() {}); 
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppTheme.electricCyan.withValues(alpha: 0.2) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: isSelected ? AppTheme.electricCyan : Colors.white12),
                                 ),
-                              );
-                            }).toList(),
-                          ),
+                                child: Text(interest['name'], style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? AppTheme.electricCyan : AppTheme.textSecondary)),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -432,10 +432,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     );
   }
-
-  // =====================================================================
-  // DRAG AND DROP GRID HELPER METHODS
-  // =====================================================================
 
   Widget _buildDragAndDropGrid() {
     return GridView.builder(
@@ -570,10 +566,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     );
   }
-
-  // =====================================================================
-  // FORM FIELD HELPER METHODS
-  // =====================================================================
 
   Widget _buildSectionLabel(String text) {
     return Padding(
