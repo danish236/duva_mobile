@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
+import '../widgets/profile_modal.dart';
 
 class AdmirersScreen extends StatefulWidget {
   const AdmirersScreen({super.key});
@@ -137,9 +138,20 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
               return GestureDetector(
                 onTap: () {
                   if (!_isPremium) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock Duva Black to reveal!')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Unlock Duva Black to reveal their photos & match!'),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: AppTheme.primaryRose,
+                      )
+                    );
+                    // Optional: Route to your paywall screen here
                   } else {
-                    // TODO: Navigate to their profile
+                    // ✅ FEATURE 1 TRIGGERED: Open full profile modal for Pro users!
+                    ProfileModal.show(
+                      context: context,
+                      profile: admirer,
+                    );
                   }
                 },
                 child: ClipRRect(
@@ -153,23 +165,57 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
                       if (!_isPremium)
                         BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                          child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.2)),
+                          child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.35)),
                         ),
                       
                       Container(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [AppTheme.voidBackground, AppTheme.voidBackground.withValues(alpha: 0)]),
+                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [AppTheme.voidBackground.withValues(alpha: 0.9), Colors.transparent]),
                         ),
                       ),
                       
+                      // ✅ FEATURE 3: DYNAMIC TEASE PILL FOR NON-PRO USERS
                       if (!_isPremium)
-                        const Center(child: CircleAvatar(backgroundColor: Colors.white24, radius: 30, child: Icon(Icons.lock_outline, color: Colors.white, size: 28))),
+                        Center(
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppTheme.primaryRose.withValues(alpha: 0.6), width: 1.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.lock, color: AppTheme.primaryRose, size: 16),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    (admirer['interests'] != null && (admirer['interests'] as List).isNotEmpty)
+                                        ? 'Likes ${admirer['interests'][0]}'
+                                        : '${admirer['distance'] ?? 4} km away',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       
-                      // IF PREMIUM, SHOW THEIR NAME
+                      // IF PREMIUM, SHOW THEIR NAME & AGE
                       if (_isPremium)
                         Positioned(
                           bottom: 12, left: 12, right: 12,
-                          child: Text(admirer['first_name'] ?? 'Secret', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('${admirer['first_name'] ?? 'Secret'}, ${admirer['age'] ?? ''}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+                              Text(admirer['location'] ?? 'Nearby', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                            ],
+                          ),
                         )
                     ],
                   ),
