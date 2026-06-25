@@ -30,13 +30,20 @@ app.post('/upload', async (c) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // Using formData() is more robust for file uploads than parseBody()
     const formData = await c.req.formData();
     const file = formData.get('image');
     
     if (!file || !(file instanceof File)) {
       return c.json({ error: 'Invalid file or no file uploaded' }, 400);
     }
+
+    // ✅ FIX: Strict Image Validation
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+    if (!allowedTypes.includes(file.type)) {
+      return c.json({ error: 'Only image uploads (JPEG, PNG, WEBP, HEIC) are allowed.' }, 400);
+    }
+
+    // (Rest of the upload code remains the same...)
 
     const fileName = `profile_${user.id}_${Date.now()}`;
     // Accessing the bucket correctly using the binding name
@@ -54,86 +61,68 @@ app.post('/upload', async (c) => {
 });
 
 // --- 2. THE SMART POOL ROUTE (With Strict Preferences) ---
-// --- 2. THE SMART POOL ROUTE (With Geolocation & Haversine) ---
 app.get('/pool', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // 1. Get My Profile & Preferences
-    const { data: myProfile } = await supabase.from('profiles').select('min_age, max_age, filter_expectation, lat, lng, max_distance').eq('id', user.id).single();
-    const minAge = myProfile?.min_age || 18;
-    const maxAge = myProfile?.max_age || 65;
-    const maxDistance = myProfile?.max_distance || 50; // Defaults to 50km
-    const myLat = myProfile?.lat;
-    const myLng = myProfile?.lng;
-    const filterExpectation = myProfile?.filter_expectation;
+    // ✅ NEW: Read pagination from URL query params (e.g. /pool?page=0)
+    const page = parseInt(c.req.query('page') || '0');
+    const limit = 15; // 15 users per swipe batch
+    const offset = page * limit;
 
-    // 2. Get Exclusions (Swiped + Blocked)
-    const { data: swipes } = await supabase.from('swipes').select('swiped_id').eq('swiper_id', user.id);
-    const { data: blocksMade } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id);
-    const { data: blocksReceived } = await supabase.from('blocks').select('blocker_id').eq('blocked_id', user.id);
-    const excludedSet = new Set([user.id, ...(swipes || []).map(s => s.swiped_id), ...(blocksMade || []).map(b => b.blocked_id), ...(blocksReceived || []).map(b => b.blocker_id)]);
-    const swipedIds = Array.from(excludedSet);
+    const { data: myProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
-    // 3. Get MY Interests
+    // Call the database-level filtering function we just made
+    const { data: rawPool, error } = await supabase.rpc('get_smart_pool', {
+      my_id: user.id,
+      my_lat: myProfile.lat,
+      my_lng: myProfile.lng,
+      min_age: myProfile.min_age || 18,
+      max_age: myProfile.max_age || 65,
+      max_dist_km: myProfile.max_distance || 50,
+      filter_exp: myProfile.filter_expectation,
+      page_limit: limit,
+      page_offset: offset
+    });
+
+    if (error) throw error;
+
+    // Get My Interests
     const { data: myInterestsData } = await supabase.from('profile_interests').select('interest_id').eq('profile_id', user.id);
     const myInterests = (myInterestsData || []).map(i => i.interest_id);
 
-    // 4. Fetch the unswiped pool (we fetch a larger batch to filter in memory)
-    let poolQuery = supabase.from('profiles').select(`*, profile_interests ( interest_id, master_interests ( name ) )`);
-    if (swipedIds.length > 0) poolQuery = poolQuery.not('id', 'in', `(${swipedIds.join(',')})`);
-    if (filterExpectation) poolQuery = poolQuery.eq('expectations', filterExpectation);
-    
-    const { data: rawPool, error } = await poolQuery.limit(100);
-    if (error) throw error;
-
-    // 5. ALGORITHM: Calculate Distance, Age, and Shared Interests
     const scoredPool = [];
     
+    // We only iterate over 15 users now! Extremely fast.
     for (const profile of (rawPool || [])) {
-      // Age Calculation
-      const age = profile.dob ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / 31557600000) : 18;
-      if (age < minAge || age > maxAge) continue; // Drop if outside age range
-
-      // Distance Calculation (Haversine Formula)
-      let distanceKm = 0;
-      if (myLat && myLng && profile.lat && profile.lng) {
-        const R = 6371; // Earth's radius in km
-        const dLat = (profile.lat - myLat) * (Math.PI/180);
-        const dLng = (profile.lng - myLng) * (Math.PI/180);
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(myLat * (Math.PI/180)) * Math.cos(profile.lat * (Math.PI/180)) * Math.sin(dLng/2) * Math.sin(dLng/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        distanceKm = Math.round(R * c);
-      }
+      // (Optional) Fetch their interests here, or join it in the RPC
+      const { data: theirInterests } = await supabase.from('profile_interests').select('interest_id, master_interests(name)').eq('profile_id', profile.id);
       
-      // Drop if they are further away than user's preference!
-      if (distanceKm > maxDistance) continue; 
-
-      // Interests Math
-      const theirInterests = profile.profile_interests || [];
-      const theirInterestIds = theirInterests.map((pi: any) => pi.interest_id);
-      const theirInterestNames = theirInterests.map((pi: any) => pi.master_interests?.name).filter(Boolean);
+      const theirInterestIds = (theirInterests || []).map((pi: any) => pi.interest_id);
+      const theirInterestNames = (theirInterests || []).map((pi: any) => pi.master_interests?.name);
       const sharedCount = theirInterestIds.filter((id: number) => myInterests.includes(id)).length;
 
       scoredPool.push({
         id: profile.id,
         firstName: profile.first_name,
-        age: age,
+        age: profile.dob ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / 31557600000) : 18,
         location: profile.location,
-        distance: distanceKm, 
+        distance: Math.round(profile.distance), 
         bio: profile.bio,
         expectations: profile.expectations,
-        currentDateBid: profile.current_date_bid, // <--- ADD THIS LINE
+        currentDateBid: profile.current_date_bid,
         images: profile.images || [],
         interests: theirInterestNames,
         sharedInterestsCount: sharedCount 
       });
     }
 
+    // Sort the 15 users by shared interests
     scoredPool.sort((a, b) => b.sharedInterestsCount - a.sharedInterestsCount);
-    return c.json(scoredPool.slice(0, 20));
+    
+    return c.json({ data: scoredPool, nextPage: rawPool.length === limit ? page + 1 : null });
   } catch (e) {
     console.error(e);
     return c.json({ error: 'Failed to fetch pool' }, 500);
@@ -147,17 +136,29 @@ app.get('/matches', async (c) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // Fetching people who 'like'd the current user
     const { data, error } = await supabase
       .from('swipes')
-      .select('swiper_id, profiles!swipes_swiper_id_fkey(*)') 
+      .select('profiles!swipes_swiper_id_fkey(*)') 
       .eq('swiped_id', user.id)
       .eq('action', 'like');
 
     if (error) throw error;
     
-    // Map to just the profile objects
-    const admirers = data.map((d: any) => d.profiles).filter(Boolean);
+    // ✅ FIX: Map snake_case to camelCase so Flutter doesn't crash
+    const admirers = data.map((d: any) => d.profiles).filter(Boolean).map((p: any) => ({
+        id: p.id,
+        firstName: p.first_name,
+        // Calculate age on the fly
+        age: p.dob ? Math.floor((Date.now() - new Date(p.dob).getTime()) / 31557600000) : 18,
+        location: p.location,
+        bio: p.bio,
+        expectations: p.expectations,
+        currentDateBid: p.current_date_bid, // Snake to Camel
+        images: p.images || [],
+        distance: 0, // Placeholder unless you calculate distance to admirers
+        interests: [] 
+    }));
+
     return c.json(admirers);
   } catch (e) {
     console.error(e);

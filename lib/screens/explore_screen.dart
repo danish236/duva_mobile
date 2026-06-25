@@ -10,6 +10,7 @@ import 'package:geocoding/geocoding.dart';
 import '../theme.dart'; 
 import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -26,7 +27,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _isLoading = true;
   bool _isPremium = false;
   final dio = Dio();
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
   
 
   Future<void> _triggerRewind() async {
