@@ -68,6 +68,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
         });
       }
     }
+
+    _hasMore = true;
+    _currentPage = 0;
+    _potentialMatches.clear();
+
+    
     await _updateUserLocation();
     await _fetchPool();
   }
@@ -271,7 +277,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Future<void> _executeModerationAction(String action, String targetId, int? reasonId) async {
     // Instantly swipe them left
-    _swiperController.swipe(CardSwiperDirection.left);
+    setState(() {
+      _potentialMatches.removeWhere((p) => p.id == targetId);
+    });
     
     try {
       final options = await _getSecureOptions();

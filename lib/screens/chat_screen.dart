@@ -42,8 +42,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _fetchPremiumStatus() async {
-    final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', _myUserId!).single();
-    if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
+    if (_myUserId == null) return; // ✅ Failsafe against null exceptions
+    try {
+      final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', _myUserId!).single();
+      if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
+    } catch (e) {
+      debugPrint("Failed to load premium status: $e");
+    }
   }
 
   @override
@@ -65,7 +70,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final response = await dio.get('$apiUrl/messages/${widget.matchId}', options: options);
       if (mounted) {
         setState(() {
-          _messages = response.data;
+          _messages = List.from(response.data.reversed);
           _isLoading = false; // Turn off shimmer when data arrives
         });
         if (!isPolling && _messages.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -82,6 +87,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     HapticFeedback.mediumImpact();
     
+    // Pause polling temporarily
+    _pollingTimer?.cancel(); 
+    
     setState(() {
       _messages.add({'sender_id': _myUserId, 'content': text, 'created_at': DateTime.now().toIso8601String()});
     });
@@ -94,6 +102,9 @@ class _ChatScreenState extends State<ChatScreen> {
       await dio.post('$apiUrl/messages/${widget.matchId}', data: {'content': text}, options: options);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send message')));
+    } finally {
+      // Resume polling
+      _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages(isPolling: true));
     }
   }
 

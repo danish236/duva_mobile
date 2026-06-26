@@ -230,9 +230,9 @@ app.get('/messages/:match_id', async (c) => {
     // Fetch messages where I am sender & they are receiver, OR they are sender & I am receiver
     const { data: messages, error } = await supabase
       .from('messages')
-      .select('id, sender_id, content, created_at')
+      .select('id, sender_id, content, created_at, is_read')
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${matchId}),and(sender_id.eq.${matchId},receiver_id.eq.${user.id})`)
-      .order('created_at', { ascending: true }) // Oldest first (for chat UI)
+      .order('created_at', { ascending: false })
       .limit(100); 
 
     if (error) throw error;
@@ -300,6 +300,7 @@ app.patch('/notifications/read', async (c) => {
 });
 
 // --- 7. SAVE PREFERENCES ---
+// --- 7. SAVE PREFERENCES ---
 app.post('/preferences', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -307,15 +308,34 @@ app.post('/preferences', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const { min_age, max_age, filter_expectation, max_distance } = await c.req.json();
+
+    // 🔒 SECURITY FIX: Server-Side Data Validation
+    // 1. Enforce POCSO / DPDP Age Compliance
+    if (min_age !== undefined && typeof min_age === 'number' && min_age < 18) {
+      return c.json({ error: 'Critical Security: Minimum age must be 18+.' }, 403);
+    }
+    
+    // 2. Prevent Logic Manipulation
+    if (min_age !== undefined && max_age !== undefined && max_age < min_age) {
+      return c.json({ error: 'Maximum age cannot be lower than minimum age.' }, 400);
+    }
+
+    // 3. Prevent Server Load Attacks (e.g., sending distance: 9999999 to crash the haversine query)
+    if (max_distance !== undefined && (max_distance < 1 || max_distance > 500)) {
+       return c.json({ error: 'Distance must be between 1km and 500km.' }, 400);
+    }
+
     const { error } = await supabase.from('profiles').update({ 
-        min_age: min_age, max_age: max_age, 
-        max_distance: max_distance, // <--- Add this line to the update block
+        min_age: min_age, 
+        max_age: max_age, 
+        max_distance: max_distance, 
         filter_expectation: filter_expectation === 'Any' ? null : filter_expectation 
     }).eq('id', user.id);
 
     if (error) throw error;
     return c.json({ success: true });
   } catch (e) {
+    console.error('Preferences API Error:', e);
     return c.json({ error: 'Failed to update preferences' }, 500);
   }
 });
@@ -417,10 +437,15 @@ app.post('/location', async (c) => {
 
     const { lat, lng, city } = await c.req.json();
 
+    // 🔒 SECURITY FIX: Geographic boundary validation
+    if (typeof lat !== 'number' || typeof lng !== 'number' || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+       return c.json({ error: 'Invalid geographic coordinates provided.' }, 400);
+    }
+
     await supabase.from('profiles').update({ 
       lat: lat, 
       lng: lng, 
-      location: city // Automatically updates their text location too!
+      location: city ? String(city).substring(0, 50) : 'Unknown' // Prevent massive string injection
     }).eq('id', user.id);
 
     return c.json({ success: true });
@@ -439,13 +464,26 @@ app.post('/rewind', async (c) => {
     // Get the absolute last swipe they made
     const { data: lastSwipe, error } = await supabase
       .from('swipes')
-      .select('id')
+      .select('id, action, swiped_id')
       .eq('swiper_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
     if (error || !lastSwipe) return c.json({ error: 'No swipes to rewind' }, 400);
+
+    // ✅ FIX: Check if it was a mutual match before allowing deletion
+    if (lastSwipe.action === 'like') {
+        const { data: mutual } = await supabase
+            .from('swipes')
+            .select('id')
+            .eq('swiper_id', lastSwipe.swiped_id)
+            .eq('swiped_id', user.id)
+            .eq('action', 'like')
+            .single();
+        
+        if (mutual) return c.json({ error: 'Cannot rewind an alignment.' }, 403);
+    }
 
     // Delete it so the profile returns to the pool
     await supabase.from('swipes').delete().eq('id', lastSwipe.id);

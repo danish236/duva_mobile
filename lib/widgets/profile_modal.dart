@@ -42,6 +42,9 @@ class _ProfileModalState extends State<ProfileModal> {
     final List images = p['images'] ?? [];
     final List interests = p['interests'] ?? ['Design', 'Coffee', 'Travel'];
 
+    // Dynamically calculate 45% of the screen height for images
+    final double galleryHeight = MediaQuery.of(context).size.height * 0.45;
+
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.88,
       child: Stack(
@@ -57,9 +60,9 @@ class _ProfileModalState extends State<ProfileModal> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Photo Swipe Gallery
+                      // ✅ FIX: Dynamic Photo Swipe Gallery Height
                       SizedBox(
-                        height: 440,
+                        height: galleryHeight,
                         child: Stack(
                           children: [
                             PageView.builder(
@@ -105,7 +108,7 @@ class _ProfileModalState extends State<ProfileModal> {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text(p['location'] ?? 'Mumbai, India', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+                            Text(p['location'] ?? 'Unknown Location', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
                             
                             if (p['current_date_bid'] != null && p['current_date_bid'].toString().isNotEmpty) ...[
                               const SizedBox(height: 20),
@@ -128,11 +131,7 @@ class _ProfileModalState extends State<ProfileModal> {
                             const SizedBox(height: 8),
                             Text(
                               p['bio'] ?? 'No bio written yet.', 
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.87), 
-                                fontSize: 16, 
-                                height: 1.4
-                              )
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.87), fontSize: 16, height: 1.4)
                             ),
 
                             const SizedBox(height: 24),
@@ -146,7 +145,7 @@ class _ProfileModalState extends State<ProfileModal> {
                                 child: Text(tag.toString(), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
                               )).toList(),
                             ),
-                            const SizedBox(height: 100), // Spacing for floating footer
+                            const SizedBox(height: 120), // Spacing for floating footer
                           ],
                         ),
                       )
@@ -157,31 +156,36 @@ class _ProfileModalState extends State<ProfileModal> {
             ],
           ),
 
-          // Action Buttons Footer
+          // ✅ FIX: SafeArea on Action Buttons Footer
           if (widget.onLike != null && widget.onPass != null)
             Positioned(
               bottom: 0, left: 0, right: 0,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
                 decoration: BoxDecoration(color: AppTheme.voidBackground, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.8), blurRadius: 20, offset: const Offset(0, -10))]),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), side: const BorderSide(color: AppTheme.primaryRose, width: 2), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                        onPressed: () { Navigator.pop(context); widget.onPass!(); },
-                        child: const Text('PASS', style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                      ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), side: const BorderSide(color: AppTheme.primaryRose, width: 2), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                            onPressed: () { Navigator.pop(context); widget.onPass!(); },
+                            child: const Text('PASS', style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.electricCyan, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                            onPressed: () { Navigator.pop(context); widget.onLike!(); },
+                            child: const Text('ALIGN', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.electricCyan, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                        onPressed: () { Navigator.pop(context); widget.onLike!(); },
-                        child: const Text('ALIGN', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             )
