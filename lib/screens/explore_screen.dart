@@ -532,7 +532,7 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
           onTapUp: _handleTap,
           child: profile.images.isNotEmpty
               ? AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
+                  duration: AppConstants.imageTransitionDuration,
                   child: CachedNetworkImage(
                     key: ValueKey<String>(profile.images[_currentImageIndex]),
                     imageUrl: profile.images[_currentImageIndex],
