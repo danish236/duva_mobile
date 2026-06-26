@@ -192,14 +192,34 @@ app.post('/swipe', async (c) => {
 
     const { swiped_id, action } = await c.req.json();
 
-    if (user.id === swiped_id) {
-        return c.json({ error: 'You cannot perform this action on yourself.' }, 400);
+    if (user.id === swiped_id) return c.json({ error: 'Cannot swipe yourself.' }, 400);
+
+    // ⚡ THE SUPERLIKE LOGIC
+    if (action === 'superlike') {
+      const { data: myProfile } = await supabase.from('profiles').select('superlikes_balance').eq('id', user.id).single();
+      
+      // If balance is 0, trigger the frontend to show the Purchase Screen
+      if (!myProfile || myProfile.superlikes_balance <= 0) {
+        return c.json({ error: 'Out of Superlikes', outOfBalance: true }, 402); // 402 Payment Required
+      }
+
+      // Deduct 1 Superlike
+      await supabase.from('profiles').update({ superlikes_balance: myProfile.superlikes_balance - 1 }).eq('id', user.id);
+      
+      // Notify the receiver INSTANTLY
+      await supabase.from('notifications').insert({
+         user_id: swiped_id, 
+         type: 'superlike', 
+         title: '⚡ You received a Super Alignment!', 
+         message: 'Someone really stands out. Check your pool now.' 
+      });
     }
 
+    // Insert the swipe
     await supabase.from('swipes').insert({
       swiper_id: user.id,
       swiped_id: swiped_id,
-      action: action
+      action: action // 'like', 'pass', or 'superlike'
     });
 
     let isMatch = false;

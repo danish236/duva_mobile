@@ -14,7 +14,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/profile_modal.dart';
 import '../constants.dart';
 
-
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
 
@@ -35,26 +34,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
   final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
   
   Future<void> _triggerRewind() async {
-  if (!_isPremium) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind!')));
-    return;
-  }
+    if (!_isPremium) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind!')));
+      return;
+    }
+    if (_potentialMatches.isEmpty) return;
 
-  try {
-    final options = await _getSecureOptions();
-    final response = await dio.post('$apiUrl/rewind', options: options);
-    
-    // ONLY pop the card back if the database successfully wiped the swipe
-    if (response.statusCode == 200 && mounted) {
-      _swiperController.undo();
-    }
-  } on DioException catch (e) {
-    if (mounted) {
-      final msg = e.response?.data['error'] ?? 'Cannot rewind this alignment.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.primaryRose));
+    try {
+      final options = await _getSecureOptions();
+      final response = await dio.post('$apiUrl/rewind', options: options);
+      
+      if (response.statusCode == 200 && mounted) {
+        _swiperController.undo();
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        final msg = e.response?.data['error'] ?? 'Cannot rewind this alignment.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.primaryRose));
+      }
     }
   }
-}
 
   @override
   void initState() {
@@ -81,7 +80,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _hasMore = true;
     _currentPage = 0;
     _potentialMatches.clear();
-
 
     await _updateUserLocation();
     await _fetchPool();
@@ -164,9 +162,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final profileId = _potentialMatches[previousIndex].id;
     
     if (direction == CardSwiperDirection.right) {
-      _executeSwipeBackend(true, profileId);
+      _executeSwipeBackend('like', profileId);
     } else if (direction == CardSwiperDirection.left) {
-      _executeSwipeBackend(false, profileId);
+      _executeSwipeBackend('pass', profileId);
+    } else if (direction == CardSwiperDirection.top) {
+      _executeSwipeBackend('superlike', profileId);
     }
 
     if (currentIndex != null && currentIndex >= _potentialMatches.length - AppConstants.paginationTriggerOffset) {
@@ -182,11 +182,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
     });
   }
 
-  Future<void> _executeSwipeBackend(bool isLike, String profileId) async {
+  Future<void> _executeSwipeBackend(String action, String profileId) async {
     HapticFeedback.heavyImpact();
     try {
       final options = await _getSecureOptions();
-      final response = await dio.post('$apiUrl/swipe', data: {'swiped_id': profileId, 'action': isLike ? 'like' : 'pass'}, options: options);
+      final response = await dio.post(
+        '$apiUrl/swipe', 
+        data: {'swiped_id': profileId, 'action': action}, 
+        options: options
+      );
 
       if (response.data['isMatch'] == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -196,12 +200,61 @@ class _ExploreScreenState extends State<ExploreScreen> {
           )
         );
       }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 402 && e.response?.data['outOfBalance'] == true) {
+        _swiperController.undo(); 
+        if (mounted) _showBuySuperlikesSheet();
+      } else {
+        debugPrint("Swipe Network Error: ${e.message}");
+      }
     } catch (e) {
-      debugPrint("Swipe Network Error: $e");
+      debugPrint("Swipe Error: $e");
     }
   }
 
-  // --- MODERATION LOGIC ---
+  void _showBuySuperlikesSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: AppTheme.voidBackground, 
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)), 
+          border: Border.all(color: AppTheme.electricCyan.withValues(alpha: 0.3))
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.flare, color: AppTheme.electricCyan, size: 64), 
+              const SizedBox(height: 16),
+              const Text('OUT OF SUPER ALIGNMENTS', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 12),
+              const Text('Stand out from the void. Super alignments are 3x more likely to result in a match.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.electricCyan, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing ₹300 payment for 10 Superlikes...')));
+                  },
+                  child: const Text('GET 10 FOR ₹300', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('MAYBE LATER', style: TextStyle(color: Colors.white54)),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   void _showModerationOptions(MatchProfile profile) {
     showModalBottomSheet(
@@ -285,7 +338,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Future<void> _executeModerationAction(String action, String targetId, int? reasonId) async {
-    // Instantly swipe them left
     setState(() {
       _potentialMatches.removeWhere((p) => p.id == targetId);
     });
@@ -348,10 +400,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      ShimmerBox(width: 50, height: 50, borderRadius: 25),
+                      const SizedBox(width: 16),
                       ShimmerBox(width: 64, height: 64, borderRadius: 32),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 16),
+                      ShimmerBox(width: 50, height: 50, borderRadius: 25),
+                      const SizedBox(width: 16),
                       ShimmerBox(width: 64, height: 64, borderRadius: 32),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 16),
                       ShimmerBox(width: 50, height: 50, borderRadius: 25),
                     ],
                   ),
@@ -376,7 +432,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
               const SizedBox(height: 12),
               const Text('No profiles match your advanced filters.', style: TextStyle(color: AppTheme.textSecondary)),
               const SizedBox(height: 32),
-              // 🔒 FIX: Escape hatch to wake the engine back up
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.electricCyan,
@@ -411,7 +466,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             cardsCount: _potentialMatches.length,
             onSwipe: _onSwipe,
             onEnd: _onEnd,
-            allowedSwipeDirection: const AllowedSwipeDirection.symmetric(horizontal: true),
+            allowedSwipeDirection: const AllowedSwipeDirection.only(left: true, right: true, up: true),
             numberOfCardsDisplayed: 2, 
             backCardOffset: const Offset(0, 0), 
             padding: EdgeInsets.zero, 
@@ -419,7 +474,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               return CinematicProfileCard(
                 profile: _potentialMatches[index],
                 swipeProgress: horizontalThresholdPercentage, 
-                // ✅ Added the callback connection here
+                verticalSwipeProgress: verticalThresholdPercentage,
                 onMoreTap: () => _showModerationOptions(_potentialMatches[index]),
               );
             },
@@ -430,24 +485,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildGlassButton(Icons.replay, Colors.amber, _triggerRewind, size: 50),
-                const SizedBox(width: 24),
+                const SizedBox(width: 16),
                 _buildGlassButton(Icons.close, Colors.white, () => _swiperController.swipe(CardSwiperDirection.left)),
-                const SizedBox(width: 32),
+                const SizedBox(width: 16),
+                _buildGlassButton(Icons.flare, AppTheme.electricCyan, () => _swiperController.swipe(CardSwiperDirection.top), size: 50),
+                const SizedBox(width: 16),
                 _buildGlassButton(Icons.favorite, AppTheme.primaryRose, () => _swiperController.swipe(CardSwiperDirection.right)),
-                const SizedBox(width: 32),
+                const SizedBox(width: 16),
                 _buildGlassButton(Icons.info_outline, AppTheme.electricCyan, () {
-                // ✅ FIX: Prevent crash if stack is empty
-                if (_potentialMatches.isEmpty) return; 
-
-                // ✅ FIX: Open the new Modal for the top card
-                final topProfile = _potentialMatches.first;
-                ProfileModal.show(
-                  context: context,
-                  profile: topProfile.toJson(), // Pass the raw JSON
-                  onLike: () => _swiperController.swipe(CardSwiperDirection.right),
-                  onPass: () => _swiperController.swipe(CardSwiperDirection.left),
-                );
-              }, size: 50),
+                  if (_potentialMatches.isEmpty) return; 
+                  final topProfile = _potentialMatches.first;
+                  ProfileModal.show(
+                    context: context,
+                    profile: topProfile.toJson(), 
+                    onLike: () => _swiperController.swipe(CardSwiperDirection.right),
+                    onPass: () => _swiperController.swipe(CardSwiperDirection.left),
+                  );
+                }, size: 50),
               ],
             ),
           ),
@@ -473,6 +527,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             if (result == true && mounted) {
               setState(() {
                 _isLoading = true;
+                _hasMore = true;
+                _currentPage = 0;
               });
               _fetchPool();
             }
@@ -510,12 +566,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
 class CinematicProfileCard extends StatefulWidget {
   final MatchProfile profile;
   final int swipeProgress; 
+  final int verticalSwipeProgress;
   final VoidCallback onMoreTap; 
 
   const CinematicProfileCard({
     super.key,
     required this.profile,
     required this.swipeProgress,
+    required this.verticalSwipeProgress,
     required this.onMoreTap, 
   });
 
@@ -548,8 +606,11 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
     final profile = widget.profile;
     
     double progress = widget.swipeProgress / 10000; 
+    double vProgress = widget.verticalSwipeProgress / 10000;
+
     double likeOpacity = (progress * 2).clamp(0.0, 1.0); 
     double passOpacity = (-progress * 2).clamp(0.0, 1.0);
+    double superOpacity = (-vProgress * 2).clamp(0.0, 1.0);
 
     return Stack(
       fit: StackFit.expand,
@@ -584,7 +645,6 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
           ),
         ),
 
-        // ✅ The Three Dots Menu Icon added here
         Positioned(
           top: 50, right: 16,
           child: IconButton(
@@ -652,6 +712,28 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
             ),
           ),
 
+        if (superOpacity > 0.0)
+          Positioned(
+            bottom: 250, left: 0, right: 0,
+            child: Transform.rotate(
+              angle: -0.1,
+              child: Opacity(
+                opacity: superOpacity,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppTheme.electricCyan, width: 4),
+                      borderRadius: BorderRadius.circular(12),
+                      color: AppTheme.electricCyan.withValues(alpha: 0.2),
+                    ),
+                    child: const Text('SUPER', style: TextStyle(color: AppTheme.electricCyan, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
         Positioned(
           bottom: 120, 
           left: 24, right: 24,
@@ -677,7 +759,6 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                   ),
                 const SizedBox(height: 16),
                 
-                // 🟢 THE GHOSTING RADAR BADGE
                 Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
