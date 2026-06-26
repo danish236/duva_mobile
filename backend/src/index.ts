@@ -118,7 +118,8 @@ app.get('/pool', async (c) => {
         currentDateBid: profile.current_date_bid,
         images: profile.images || [],
         interests: theirInterestNames,
-        sharedInterestsCount: sharedCount 
+        sharedInterestsCount: sharedCount,
+        lastSeen: profile.last_seen
       });
     }
 
@@ -471,7 +472,8 @@ app.post('/location', async (c) => {
     await supabase.from('profiles').update({ 
       lat: lat, 
       lng: lng, 
-      location: city ? String(city).substring(0, 50) : 'Unknown' // Prevent massive string injection
+      location: city ? String(city).substring(0, 50) : 'Unknown',
+      last_seen: new Date().toISOString() // 🟢 Heartbeat refreshed!
     }).eq('id', user.id);
 
     return c.json({ success: true });

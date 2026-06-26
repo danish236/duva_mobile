@@ -29,6 +29,10 @@ class ImageService {
     
     // Use the alias here
     final dio = dio_pkg.Dio();
+    
+    // 🔒 FIX: Force JWT refresh to beat the 60-minute expiration wall
+    try { await Supabase.instance.client.auth.refreshSession(); } catch (_) {}
+    
     final session = Supabase.instance.client.auth.currentSession;
 
     if (session == null || session.accessToken == null) {

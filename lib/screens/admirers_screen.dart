@@ -125,103 +125,106 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
             ),
           ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.75
-            ),
-            itemCount: _admirers.length,
-            itemBuilder: (context, index) {
-              final admirer = _admirers[index];
-              final String imageUrl = (admirer['images'] != null && admirer['images'].isNotEmpty) ? admirer['images'][0] : 'https://via.placeholder.com/400';
+          // 🔒 FIX: Pull-to-refresh wrapper
+          child: RefreshIndicator(
+            color: AppTheme.electricCyan,
+            backgroundColor: const Color(0xFF1A1A1A),
+            onRefresh: _fetchData,
+            child: GridView.builder(
+              // 🔒 FIX: Forces physics active so pull gesture works even with 1 card
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 0.75
+              ),
+              itemCount: _admirers.length,
+              itemBuilder: (context, index) {
+                final admirer = _admirers[index];
+                final String imageUrl = (admirer['images'] != null && admirer['images'].isNotEmpty) ? admirer['images'][0] : 'https://via.placeholder.com/400';
 
-              return GestureDetector(
-                onTap: () {
-                  if (!_isPremium) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Unlock Duva Black to reveal their photos & match!'),
-                        behavior: SnackBarBehavior.floating,
-                        backgroundColor: AppTheme.primaryRose,
-                      )
-                    );
-                    // Optional: Route to your paywall screen here
-                  } else {
-                    // ✅ FEATURE 1 TRIGGERED: Open full profile modal for Pro users!
-                    ProfileModal.show(
-                      context: context,
-                      profile: admirer,
-                    );
-                  }
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(imageUrl, fit: BoxFit.cover),
-                      
-                      // THE PAYWALL BLUR
-                      if (!_isPremium)
-                        BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                          child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.35)),
+                return GestureDetector(
+                  onTap: () {
+                    if (!_isPremium) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Unlock Duva Black to reveal their photos & match!'),
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: AppTheme.primaryRose,
+                        )
+                      );
+                    } else {
+                      ProfileModal.show(
+                        context: context,
+                        profile: admirer,
+                      );
+                    }
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(imageUrl, fit: BoxFit.cover),
+                        
+                        if (!_isPremium)
+                          BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                            child: Container(color: AppTheme.voidBackground.withValues(alpha: 0.35)),
+                          ),
+                        
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [AppTheme.voidBackground.withValues(alpha: 0.9), Colors.transparent]),
+                          ),
                         ),
-                      
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [AppTheme.voidBackground.withValues(alpha: 0.9), Colors.transparent]),
-                        ),
-                      ),
-                      
-                      // ✅ FEATURE 3: DYNAMIC TEASE PILL FOR NON-PRO USERS
-                      if (!_isPremium)
-                        Center(
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.65),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppTheme.primaryRose.withValues(alpha: 0.6), width: 1.5),
+                        
+                        if (!_isPremium)
+                          Center(
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.65),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: AppTheme.primaryRose.withValues(alpha: 0.6), width: 1.5),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.lock, color: AppTheme.primaryRose, size: 16),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      (admirer['interests'] != null && (admirer['interests'] as List).isNotEmpty)
+                                          ? 'Likes ${admirer['interests'][0]}'
+                                          : '${admirer['distance'] ?? 4} km away',
+                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: Row(
+                          ),
+                        
+                        if (_isPremium)
+                          Positioned(
+                            bottom: 12, left: 12, right: 12,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.lock, color: AppTheme.primaryRose, size: 16),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    (admirer['interests'] != null && (admirer['interests'] as List).isNotEmpty)
-                                        ? 'Likes ${admirer['interests'][0]}'
-                                        : '${admirer['distance'] ?? 4} km away',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
+                                Text('${admirer['first_name'] ?? 'Secret'}, ${admirer['age'] ?? ''}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+                                Text(admirer['location'] ?? 'Nearby', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                               ],
                             ),
-                          ),
-                        ),
-                      
-                      // IF PREMIUM, SHOW THEIR NAME & AGE
-                      if (_isPremium)
-                        Positioned(
-                          bottom: 12, left: 12, right: 12,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('${admirer['first_name'] ?? 'Secret'}, ${admirer['age'] ?? ''}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
-                              Text(admirer['location'] ?? 'Nearby', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                            ],
-                          ),
-                        )
-                    ],
+                          )
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ],

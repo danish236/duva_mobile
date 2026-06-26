@@ -35,20 +35,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
   final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
   
   Future<void> _triggerRewind() async {
-    if (!_isPremium) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind alignments!')));
-      return;
+  if (!_isPremium) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind!')));
+    return;
+  }
+
+  try {
+    final options = await _getSecureOptions();
+    final response = await dio.post('$apiUrl/rewind', options: options);
+    
+    // ONLY pop the card back if the database successfully wiped the swipe
+    if (response.statusCode == 200 && mounted) {
+      _swiperController.undo();
     }
-    
-    _swiperController.undo();
-    
-    try {
-      final options = await _getSecureOptions();
-      await dio.post('$apiUrl/rewind', options: options);
-    } catch (e) {
-      debugPrint("Rewind Backend Sync Failed");
+  } on DioException catch (e) {
+    if (mounted) {
+      final msg = e.response?.data['error'] ?? 'Cannot rewind this alignment.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.primaryRose));
     }
   }
+}
 
   @override
   void initState() {
@@ -369,6 +375,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
               const Text('Scanning the Void', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
               const SizedBox(height: 12),
               const Text('No profiles match your advanced filters.', style: TextStyle(color: AppTheme.textSecondary)),
+              const SizedBox(height: 32),
+              // 🔒 FIX: Escape hatch to wake the engine back up
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.electricCyan,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _hasMore = true;
+                    _currentPage = 0;
+                  });
+                  _fetchPool();
+                },
+                icon: const Icon(Icons.refresh, size: 20),
+                label: const Text('FORCE RESCAN', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              ),
             ],
           ),
         ),
@@ -650,6 +676,36 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                     ),
                   ),
                 const SizedBox(height: 16),
+                
+                // 🟢 THE GHOSTING RADAR BADGE
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: profile.activeStatusColor.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8, height: 8,
+                        decoration: BoxDecoration(
+                          color: profile.activeStatusColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: profile.activeStatusColor, blurRadius: 6)],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        profile.activeStatusText,
+                        style: TextStyle(color: profile.activeStatusColor, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+
                 Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -1, height: 1.1)),
                 const SizedBox(height: 8),
                 Row(
