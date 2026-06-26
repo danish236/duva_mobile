@@ -5,8 +5,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'profile_screen.dart';
 import '../theme.dart';
-import '../services/image_service.dart'; // YOUR NEW SERVICE
+import '../services/image_service.dart';
 import '../constants.dart';
+
+class ProfilePhotoState {
+  dynamic image; // Can be a URL string or a File
+  bool isChecking;
+  bool isRejected;
+  
+  ProfilePhotoState({required this.image, this.isChecking = false, this.isRejected = false});
+}
 
 class EditProfileScreen extends StatefulWidget {
   final ProfileData currentProfile;
@@ -45,8 +53,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<String> _masterEducation = [];
   List<Map<String, dynamic>> _masterInterests = [];
 
-  List<dynamic> _currentImages = [];
-  final List<int> _selectedInterestIds = []; // Made final to fix lint
+  List<ProfilePhotoState> _currentImages = [];
+  final List<int> _selectedInterestIds = []; 
 
   // Static standard lists for lifestyle
   final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\""); 
@@ -74,7 +82,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _selectedZodiac = widget.currentProfile.zodiac;
     _selectedKids = widget.currentProfile.kids;
     
-    _currentImages = List<dynamic>.from(widget.currentProfile.images);
+    // Initialize with ProfilePhotoState wrapper
+    _currentImages = widget.currentProfile.images
+        .map((url) => ProfilePhotoState(image: url))
+        .toList();
+
     _fetchMasterData();
   }
 
@@ -121,14 +133,49 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickImage() async {
     if (_currentImages.length >= AppConstants.maxProfilePhotos) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum ${AppConstants.maxProfilePhotos} photos allowed.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Maximum ${AppConstants.maxProfilePhotos} photos allowed.')));
       return;
     }
+    
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    
     if (pickedFile != null) {
-      setState(() => _currentImages.add(File(pickedFile.path)));
+      final file = File(pickedFile.path);
+      
+      // 1. Add to UI instantly as "Checking"
+      setState(() {
+        _currentImages.add(ProfilePhotoState(image: file, isChecking: true));
+      });
       HapticFeedback.mediumImpact();
+
+      final index = _currentImages.length - 1;
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      
+      try {
+        // 2. Trigger instant upload & AI moderation via ImageService
+        final url = await ImageService.compressAndUploadImage(file, userId, index);
+        
+        // 3. AI Approved it! Swap the File for the new public URL
+        if (mounted) {
+          setState(() {
+            _currentImages[index].isChecking = false;
+            if (url != null) _currentImages[index].image = url;
+          });
+        }
+      } catch (e) {
+        // 4. AI Rejected it (or network failed)
+        if (mounted) {
+          setState(() {
+            _currentImages[index].isChecking = false;
+            _currentImages[index].isRejected = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Image rejected by safety filters.'),
+            backgroundColor: AppTheme.primaryRose,
+          ));
+        }
+      }
     }
   }
 
@@ -144,6 +191,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
+    // Prevent saving if AI is still analyzing an image
+    final isAnyChecking = _currentImages.any((photo) => photo.isChecking);
+    if (isAnyChecking) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please wait for photos to finish checking.')));
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -152,20 +206,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final userId = Supabase.instance.client.auth.currentUser!.id;
       List<String> finalImageUrls = [];
 
-      // 1. Process Images using our new DRY Service
       for (int i = 0; i < _currentImages.length; i++) {
-        final img = _currentImages[i];
+        final photoState = _currentImages[i];
+        if (photoState.isRejected) continue; // Skip rejected photos completely
+        
+        final img = photoState.image;
         if (img is String) {
           finalImageUrls.add(img);
-        } else if (img is File) {
-          final url = await ImageService.compressAndUploadImage(img, userId, i);
-          if (url != null) finalImageUrls.add(url);
         }
+        // Files are already uploaded and swapped for Strings during _pickImage.
+        // If it's still a file here, something went wrong, so we skip it.
+      }
+
+      if (finalImageUrls.isEmpty) {
+        throw Exception("No valid images to save.");
       }
 
       String? cleanText(String text) => text.trim().isEmpty ? null : text.trim();
 
-      // 2. Update Supabase Profiles
       await Supabase.instance.client.from('profiles').update({
         'bio': cleanText(_bioController.text),
         'work': cleanText(_workController.text),
@@ -185,7 +243,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'kids': _selectedKids,
       }).eq('id', userId);
 
-      // 3. Update Interests
       final uniqueInterests = _selectedInterestIds.toSet().toList();
       await Supabase.instance.client.from('profile_interests').delete().eq('profile_id', userId);
       
@@ -224,7 +281,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Container(
             height: MediaQuery.of(context).size.height * 0.6,
             padding: const EdgeInsets.only(top: 24, bottom: 40),
-            decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.98)), // Replaced BackdropFilter with opaque background to fix dart:ui removal
+            decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.98)), 
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -437,62 +494,55 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _buildDragAndDropGrid() {
     return GridView.builder(
       shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(), // Let the main ListView handle scrolling
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3, 
         crossAxisSpacing: 12, 
         mainAxisSpacing: 12, 
-        childAspectRatio: 0.7 // Tall portraits
+        childAspectRatio: 0.7 
       ),
-      itemCount: 6, // Always show 6 slots
+      itemCount: 6, 
       itemBuilder: (context, index) {
         bool hasImage = index < _currentImages.length;
 
-        // If it's an empty slot, just render an add button or blank space
         if (!hasImage) {
           return index == _currentImages.length 
               ? _buildAddPhotoSlot() 
               : _buildEmptySlot();
         }
 
-        // If it HAS an image, wrap it in Drag/Drop detectors
         return DragTarget<int>(
           onAcceptWithDetails: (details) {
             final int draggedIndex = details.data;
             if (draggedIndex != index) {
-              HapticFeedback.heavyImpact(); // THUD when dropped
+              HapticFeedback.heavyImpact(); 
               setState(() {
-                // Swap the items in the array
                 final item = _currentImages.removeAt(draggedIndex);
                 _currentImages.insert(index, item);
               });
             }
           },
           builder: (context, candidateData, rejectedData) {
-            // Is something currently hovering over this slot?
             final isHovering = candidateData.isNotEmpty;
 
             return LongPressDraggable<int>(
               data: index,
-              onDragStarted: () => HapticFeedback.selectionClick(), // TICK when lifted
-              // What it looks like while flying under your thumb
+              onDragStarted: () => HapticFeedback.selectionClick(), 
               feedback: Material(
                 color: Colors.transparent,
                 child: Transform.scale(
-                  scale: 1.1, // Zoom in slightly while dragging
+                  scale: 1.1, 
                   child: SizedBox(
-                    width: (MediaQuery.of(context).size.width - 40 - 24) / 3, // Match grid width
-                    height: ((MediaQuery.of(context).size.width - 40 - 24) / 3) / 0.7, // Match ratio
+                    width: (MediaQuery.of(context).size.width - 40 - 24) / 3, 
+                    height: ((MediaQuery.of(context).size.width - 40 - 24) / 3) / 0.7, 
                     child: _buildPhotoItem(index, isHovered: false),
                   ),
                 ),
               ),
-              // What the original spot looks like while the photo is gone
               childWhenDragging: Opacity(
                 opacity: 0.3,
                 child: _buildPhotoItem(index, isHovered: false),
               ),
-              // Normal appearance
               child: _buildPhotoItem(index, isHovered: isHovering),
             );
           },
@@ -502,7 +552,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildPhotoItem(int index, {required bool isHovered}) {
-    final image = _currentImages[index];
+    final photoState = _currentImages[index];
+    final image = photoState.image;
     
     return Stack(
       fit: StackFit.expand,
@@ -511,15 +562,51 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           duration: AppConstants.imageTransitionDuration,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: isHovered ? Border.all(color: AppTheme.electricCyan, width: 3) : null, // Glows when hovered
-            image: DecorationImage(
-              image: image is File ? FileImage(image) as ImageProvider : NetworkImage(image),
-              fit: BoxFit.cover,
-            ),
+            border: isHovered ? Border.all(color: AppTheme.electricCyan, width: 3) : null,
+            image: (photoState.isChecking || photoState.isRejected) 
+                ? (image is File ? DecorationImage(image: FileImage(image), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.5), BlendMode.darken)) : null)
+                : DecorationImage(
+                    image: image is File ? FileImage(image) as ImageProvider : NetworkImage(image),
+                    fit: BoxFit.cover,
+                  ),
           ),
         ),
-        // Positioned Badge indicating Main Photo
-        if (index == 0)
+
+        // 🕒 THE CHECKING STATE (CLOCK UI)
+        if (photoState.isChecking)
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2)),
+                SizedBox(height: 12),
+                Text('AI Checking...', style: TextStyle(color: AppTheme.electricCyan, fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+
+        // 🚫 THE REJECTED STATE
+        if (photoState.isRejected)
+          Container(
+            decoration: BoxDecoration(
+              color: AppTheme.primaryRose.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.block, color: Colors.white, size: 32),
+                SizedBox(height: 8),
+                Text('NSFW', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              ],
+            ),
+          ),
+
+        if (index == 0 && !photoState.isChecking && !photoState.isRejected)
           Positioned(
             bottom: 8, left: 8,
             child: Container(
@@ -528,18 +615,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: const Text('MAIN', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
             ),
           ),
-        // Positioned Delete Button
-        Positioned(
-          top: -4, right: -4,
-          child: IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-              child: const Icon(Icons.close, color: Colors.white, size: 16),
+          
+        if (!photoState.isChecking)
+          Positioned(
+            top: -4, right: -4,
+            child: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: const Icon(Icons.close, color: Colors.white, size: 16),
+              ),
+              onPressed: () => _removeImage(index),
             ),
-            onPressed: () => _removeImage(index),
           ),
-        ),
       ],
     );
   }

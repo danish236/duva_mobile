@@ -8,6 +8,7 @@ type Bindings = {
   SUPABASE_ANON_KEY: string;
   R2_PUBLIC_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  AI: any;
 };
 
 const POOL_BATCH_SIZE = 15;
@@ -28,7 +29,7 @@ const getSupabaseClient = (c: any) => {
   });
 };
 
-// --- 1. SECURE UPLOAD ROUTE ---
+// --- 1. SECURE UPLOAD ROUTE WITH AI MODERATION ---
 app.post('/upload', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -42,24 +43,38 @@ app.post('/upload', async (c) => {
       return c.json({ error: 'Invalid file or no file uploaded' }, 400);
     }
 
-    // ✅ FIX: Strict Image Validation
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
     if (!allowedTypes.includes(file.type)) {
-      return c.json({ error: 'Only image uploads (JPEG, PNG, WEBP, HEIC) are allowed.' }, 400);
+      return c.json({ error: 'Only image uploads are allowed.' }, 400);
     }
 
-    // (Rest of the upload code remains the same...)
+    // 🧠 THE AI MODERATION CHECK
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // We convert the image to an array of numbers so the AI can read it
+    const ai = c.env.AI;
+    const aiResponse = await ai.run('@cf/meta/llama-3.2-11b-vision-instruct', {
+      prompt: "You are a Trust and Safety moderator. Look at this image. Is it NSFW (Not Safe For Work), sexually explicit, or containing nudity? Answer STRICTLY with 'YES' or 'NO'. Nothing else.",
+      image: [...uint8Array] 
+    });
 
+    // Read the AI's answer
+    const isNSFW = aiResponse.response.toUpperCase().includes('YES');
+
+    if (isNSFW) {
+        return c.json({ error: 'NSFW Content Detected. Image rejected by Safety Engine.' }, 403);
+    }
+
+    // ✅ If the AI says 'NO' (Safe), proceed to save to Cloudflare R2
     const fileName = `profile_${user.id}_${Date.now()}`;
-    // Accessing the bucket correctly using the binding name
-    await c.env.duva_images.put(fileName, await file.arrayBuffer(), {
+    await c.env.duva_images.put(fileName, arrayBuffer, {
       httpMetadata: { contentType: file.type },
     });
 
     const publicUrl = `${c.env.R2_PUBLIC_URL}/${fileName}`;
     return c.json({ url: publicUrl, success: true });
   } catch (e) {
-    // THIS LINE IS THE KEY: It forces the error to appear in your 'wrangler tail' logs
     console.error("UPLOAD CRASH:", e);
     return c.json({ error: 'Upload failed: ' + String(e) }, 500);
   }
