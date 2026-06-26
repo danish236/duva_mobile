@@ -13,6 +13,7 @@ import 'screens/login_screen.dart';
 import 'theme.dart';
 import 'theme_notifier.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

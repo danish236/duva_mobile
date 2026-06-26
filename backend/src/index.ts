@@ -10,6 +10,10 @@ type Bindings = {
   SUPABASE_SERVICE_ROLE_KEY: string;
 };
 
+const POOL_BATCH_SIZE = 15;
+const MAX_MESSAGES_FETCH = 100;
+const MAX_MESSAGE_LENGTH = 1000;
+
 const app = new Hono<{ Bindings: Bindings }>();
 app.use('/*', cors());
 
@@ -68,9 +72,8 @@ app.get('/pool', async (c) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // ✅ NEW: Read pagination from URL query params (e.g. /pool?page=0)
     const page = parseInt(c.req.query('page') || '0');
-    const limit = 15; // 15 users per swipe batch
+    const limit = POOL_BATCH_SIZE; // Using your constant of 15
     const offset = page * limit;
 
     const { data: myProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
@@ -96,9 +99,8 @@ app.get('/pool', async (c) => {
 
     const scoredPool = [];
     
-    // We only iterate over 15 users now! Extremely fast.
+    // Iterate over 15 users
     for (const profile of (rawPool || [])) {
-      // (Optional) Fetch their interests here, or join it in the RPC
       const { data: theirInterests } = await supabase.from('profile_interests').select('interest_id, master_interests(name)').eq('profile_id', profile.id);
       
       const theirInterestIds = (theirInterests || []).map((pi: any) => pi.interest_id);
@@ -120,10 +122,13 @@ app.get('/pool', async (c) => {
       });
     }
 
-    // Sort the 15 users by shared interests
+    // Sort users by shared interests
     scoredPool.sort((a, b) => b.sharedInterestsCount - a.sharedInterestsCount);
     
-    return c.json({ data: scoredPool, nextPage: rawPool.length === limit ? page + 1 : null });
+    return c.json({
+        data: scoredPool,
+        nextPage: (rawPool && rawPool.length === limit) ? page + 1 : null
+    });
   } catch (e) {
     console.error(e);
     return c.json({ error: 'Failed to fetch pool' }, 500);
@@ -137,16 +142,22 @@ app.get('/matches', async (c) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
+    // 🔒 VAPT FIX: Add pagination and limits to Admirers
+    const page = parseInt(c.req.query('page') || '0');
+    const limit = 20;
+    const offset = page * limit;
+
     const { data, error } = await supabase
       .from('swipes')
       .select('profiles!swipes_swiper_id_fkey(*)') 
       .eq('swiped_id', user.id)
-      .eq('action', 'like');
+      .eq('action', 'like')
+      .range(offset, offset + limit - 1); // Only fetch 20 at a time!
 
     if (error) throw error;
     
-    // ✅ FIX: Map snake_case to camelCase so Flutter doesn't crash
-    const admirers = data.map((d: any) => d.profiles).filter(Boolean).map((p: any) => ({
+    // ✅ Map snake_case to camelCase so Flutter doesn't crash
+    const admirers = (data || []).map((d: any) => d.profiles).filter(Boolean).map((p: any) => ({
         id: p.id,
         firstName: p.first_name,
         // Calculate age on the fly
@@ -154,13 +165,17 @@ app.get('/matches', async (c) => {
         location: p.location,
         bio: p.bio,
         expectations: p.expectations,
-        currentDateBid: p.current_date_bid, // Snake to Camel
+        currentDateBid: p.current_date_bid, 
         images: p.images || [],
-        distance: 0, // Placeholder unless you calculate distance to admirers
+        distance: 0, 
         interests: [] 
     }));
 
-    return c.json(admirers);
+    // Return with pagination token
+    return c.json({
+        data: admirers,
+        nextPage: (data && data.length === limit) ? page + 1 : null
+    });
   } catch (e) {
     console.error(e);
     return c.json({ error: 'Failed to fetch admirers' }, 500);
@@ -175,6 +190,10 @@ app.post('/swipe', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const { swiped_id, action } = await c.req.json();
+
+    if (user.id === swiped_id) {
+        return c.json({ error: 'You cannot perform this action on yourself.' }, 400);
+    }
 
     await supabase.from('swipes').insert({
       swiper_id: user.id,
@@ -254,6 +273,10 @@ app.post('/messages/:match_id', async (c) => {
     const { content } = await c.req.json();
 
     if (!content || content.trim() === '') return c.json({ error: 'Empty message' }, 400);
+
+    if (content.length > 1000) {
+        return c.json({ error: 'Message exceeds maximum length of 1000 characters.' }, 413);
+    }
 
     const { error } = await supabase.from('messages').insert({
       sender_id: user.id,
