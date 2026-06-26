@@ -7,6 +7,7 @@ type Bindings = {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   R2_PUBLIC_URL: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -343,13 +344,15 @@ app.post('/preferences', async (c) => {
 // --- 8. ACCOUNT MANAGEMENT (Settings) ---
 app.delete('/account', async (c) => {
   try {
-    const supabase = getSupabaseClient(c);
+    const supabase = getSupabaseClient(c); // Standard client for checking who requested it
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // Hard delete the profile. (If you have CASCADE set up in Supabase, 
-    // this automatically wipes their swipes, interests, and messages too).
-    const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+    // ✅ FIX: Create an Admin Client to delete the actual Auth User
+    const adminSupabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+    
+    // Deleting the auth user automatically cascades and deletes their 'profiles' row if your DB foreign keys are set up correctly.
+    const { error } = await adminSupabase.auth.admin.deleteUser(user.id);
     
     if (error) throw error;
     return c.json({ success: true, message: 'Account wiped successfully' });

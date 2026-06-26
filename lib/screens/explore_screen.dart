@@ -11,6 +11,7 @@ import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/profile_modal.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -73,7 +74,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _currentPage = 0;
     _potentialMatches.clear();
 
-    
+
     await _updateUserLocation();
     await _fetchPool();
   }
@@ -407,8 +408,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 _buildGlassButton(Icons.favorite, AppTheme.primaryRose, () => _swiperController.swipe(CardSwiperDirection.right)),
                 const SizedBox(width: 32),
                 _buildGlassButton(Icons.info_outline, AppTheme.electricCyan, () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Full profile modal coming soon!')));
-                }, size: 50), 
+                // ✅ FIX: Prevent crash if stack is empty
+                if (_potentialMatches.isEmpty) return; 
+
+                // ✅ FIX: Open the new Modal for the top card
+                final topProfile = _potentialMatches.first;
+                ProfileModal.show(
+                  context: context,
+                  profile: topProfile.toJson(), // Pass the raw JSON
+                  onLike: () => _swiperController.swipe(CardSwiperDirection.right),
+                  onPass: () => _swiperController.swipe(CardSwiperDirection.left),
+                );
+              }, size: 50),
               ],
             ),
           ),

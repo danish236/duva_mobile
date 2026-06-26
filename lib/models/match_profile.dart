@@ -46,4 +46,23 @@ class MatchProfile {
       sharedInterestsCount: json['sharedInterestsCount'] ?? 0,
     );
   }
+
+  // ✅ ADDED THIS METHOD TO RESOLVE THE COMPILER ERROR
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'firstName': firstName,
+      'age': age,
+      'location': location,
+      'distance': distance,
+      'bio': bio,
+      'expectations': expectations,
+      'work': work,
+      'education': education,
+      'currentDateBid': currentDateBid,
+      'interests': interests,
+      'images': images,
+      'sharedInterestsCount': sharedInterestsCount,
+    };
+  }
 }
