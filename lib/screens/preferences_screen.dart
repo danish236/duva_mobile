@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
+import '../constants.dart';
 
 class PreferencesScreen extends StatefulWidget {
   const PreferencesScreen({super.key});
@@ -143,7 +144,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                         return GestureDetector(
                           onTap: () => setState(() => _selectedGender = g['name']),
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
+                            duration: AppConstants.imageTransitionDuration,
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             decoration: BoxDecoration(
                               color: isSelected ? AppTheme.primaryRose : AppTheme.surfaceGlass,
@@ -170,7 +171,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                             });
                           },
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
+                            duration: AppConstants.imageTransitionDuration,
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             decoration: BoxDecoration(
                               color: isSelected ? AppTheme.electricCyan.withValues(alpha: 0.2) : Colors.transparent,

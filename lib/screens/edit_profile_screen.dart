@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'profile_screen.dart';
 import '../theme.dart';
 import '../services/image_service.dart'; // YOUR NEW SERVICE
+import '../constants.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final ProfileData currentProfile;
@@ -119,8 +120,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickImage() async {
-    if (_currentImages.length >= 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 6 photos allowed.')));
+    if (_currentImages.length >= AppConstants.maxProfilePhotos) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum ${AppConstants.maxProfilePhotos} photos allowed.')));
       return;
     }
     final picker = ImagePicker();
@@ -295,7 +296,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 setState(() {}); 
                               },
                               child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
+                                duration: AppConstants.imageTransitionDuration,
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                 decoration: BoxDecoration(
                                   color: isSelected ? AppTheme.electricCyan.withValues(alpha: 0.2) : Colors.transparent,
@@ -415,7 +416,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: 32),
 
             _buildSectionLabel('ABOUT YOU'),
-            _buildTextField(_bioController, 'Bio', 'A little bit about me...', maxLines: 4, maxLength: 300),
+            _buildTextField(_bioController, 'Bio', 'A little bit about me...', maxLines: 4, maxLength: AppConstants.maxBioLength),
             
             const SizedBox(height: 48),
             SizedBox(
@@ -507,7 +508,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       fit: StackFit.expand,
       children: [
         AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: AppConstants.imageTransitionDuration,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: isHovered ? Border.all(color: AppTheme.electricCyan, width: 3) : null, // Glows when hovered

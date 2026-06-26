@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../constants.dart';
 
 class ProfileModal extends StatefulWidget {
   final Map<String, dynamic> profileData;
@@ -80,7 +81,7 @@ class _ProfileModalState extends State<ProfileModal> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: List.generate(images.length, (i) => AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
+                                    duration: AppConstants.imageTransitionDuration,
                                     margin: const EdgeInsets.symmetric(horizontal: 3),
                                     width: _activePhoto == i ? 20 : 6, height: 6,
                                     decoration: BoxDecoration(color: _activePhoto == i ? AppTheme.electricCyan : Colors.white38, borderRadius: BorderRadius.circular(3)),

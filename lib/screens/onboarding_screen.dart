@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../main.dart'; 
 import '../theme.dart';
+import '../constants.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -418,7 +419,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     },
                     borderRadius: BorderRadius.circular(20),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      duration: AppConstants.imageTransitionDuration, padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       decoration: BoxDecoration(color: isSelected ? AppTheme.electricCyan : AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(20)),
                       child: Text(interest['name'], style: TextStyle(color: isSelected ? Colors.white : AppTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 15)),
                     ),

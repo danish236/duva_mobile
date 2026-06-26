@@ -4,8 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
-
 import 'package:flutter/services.dart';
+import '../constants.dart';
+
 
 class ChatScreen extends StatefulWidget {
   final String matchId;
@@ -38,7 +39,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _myUserId = Supabase.instance.client.auth.currentUser?.id;
     _fetchPremiumStatus();
     _fetchMessages();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages(isPolling: true));
+    _pollingTimer = Timer.periodic(AppConstants.chatPollingInterval, (timer) => _fetchMessages(isPolling: true));
   }
 
   Future<void> _fetchPremiumStatus() async {
@@ -104,7 +105,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send message')));
     } finally {
       // Resume polling
-      _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages(isPolling: true));
+      _pollingTimer = Timer.periodic(AppConstants.chatPollingInterval, (timer) => _fetchMessages(isPolling: true));
     }
   }
 

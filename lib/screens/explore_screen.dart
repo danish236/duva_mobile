@@ -12,6 +12,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/profile_modal.dart';
+import '../constants.dart';
+
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -161,7 +163,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       _executeSwipeBackend(false, profileId);
     }
 
-    if (currentIndex != null && currentIndex >= _potentialMatches.length - 3) {
+    if (currentIndex != null && currentIndex >= _potentialMatches.length - AppConstants.paginationTriggerOffset) {
       _fetchPool();
     }
     
