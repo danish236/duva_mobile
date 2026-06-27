@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../widgets/profile_modal.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 import '../constants.dart';
 
 class AdmirersScreen extends StatefulWidget {
@@ -19,8 +20,8 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
   bool _isLoading = true;
   bool _isPremium = false; // THE PRO LOCK
   List<dynamic> _admirers = [];
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
-  final dio = Dio();
+  final String apiUrl = ApiClient.apiUrl;
+  final Dio dio = ApiClient().dio;
 
   @override
   void initState() {

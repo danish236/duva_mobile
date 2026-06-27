@@ -21,6 +21,17 @@ class CacheService {
   final Set<String> _persistentKeys = {};
   bool _initialized = false;
 
+  // Keys whose data is too sensitive for SharedPreferences (device backups, rooted devices)
+  // These are kept only in memory and refetched from the server on app restart
+  static const Set<String> _sensitiveKeys = {
+    'profile_data',
+    'chat_messages',
+    'is_premium',
+  };
+  bool _isSensitive(String key) =>
+      _sensitiveKeys.contains(key) ||
+      _sensitiveKeys.any((s) => key.startsWith('${s}_'));
+
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     for (final k in _prefs!.getKeys()) {
@@ -95,15 +106,17 @@ class CacheService {
     final cached = get(key);
     if (cached != null) return cached as T;
 
-    final persistent = await getPersistent(key);
-    if (persistent != null) {
-      set(key, persistent, ttl: ttl);
-      return persistent as T;
+    if (!_isSensitive(key)) {
+      final persistent = await getPersistent(key);
+      if (persistent != null) {
+        set(key, persistent, ttl: ttl);
+        return persistent as T;
+      }
     }
 
     final data = await fetch();
     set(key, data, ttl: ttl);
-    if (ttl != null && ttl.inMinutes >= 1) {
+    if (!_isSensitive(key) && ttl != null && ttl.inMinutes >= 1) {
       await setPersistent(key, data, ttl: ttl);
     }
     return data;
@@ -143,6 +156,10 @@ class CacheService {
       await _prefs?.remove('${key}_expiry');
     }
     _persistentKeys.clear();
+  }
+
+  void clearMemory() {
+    _memory.clear();
   }
 
   void invalidatePremium() {

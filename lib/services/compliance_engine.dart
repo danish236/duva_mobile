@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'api_service.dart';
 
 class ComplianceEngine {
   // POCSO & Age Compliance
@@ -21,8 +21,8 @@ class ComplianceEngine {
     if (spamRegex.hasMatch(text)) return false;
 
     try {
-      final dio = Dio();
-      final apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+      final dio = ApiClient().dio;
+      final apiUrl = ApiClient.apiUrl;
       final session = Supabase.instance.client.auth.currentSession;
       
       final response = await dio.post(

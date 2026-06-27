@@ -7,6 +7,7 @@ import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
 import '../constants.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String matchId;
@@ -22,8 +23,8 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final Dio dio = Dio();
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  final Dio dio = ApiClient().dio;
+  final String apiUrl = ApiClient.apiUrl;
   bool _isPremium = false;
   
   // AI Icebreaker States
@@ -33,7 +34,8 @@ class _ChatScreenState extends State<ChatScreen> {
   List<dynamic> _messages = [];
   Timer? _pollingTimer;
   String? _myUserId;
-  bool _isLoading = true; 
+  bool _isLoading = true;
+  int _pollingFailures = 0;
 
   String get _messageCacheKey => 'chat_messages_${widget.matchId}';
 
@@ -44,7 +46,16 @@ class _ChatScreenState extends State<ChatScreen> {
     _fetchPremiumStatus();
     _tryLoadCachedMessages();
     _fetchMessages();
-    _pollingTimer = Timer.periodic(AppConstants.chatPollingInterval, (timer) => _fetchMessages(isPolling: true));
+    _schedulePolling();
+  }
+
+  void _schedulePolling() {
+    _pollingTimer?.cancel();
+    const int maxBackoff = 60;
+    final interval = Duration(seconds: _pollingFailures > 0
+        ? (_pollingFailures * 3).clamp(3, maxBackoff)
+        : 3);
+    _pollingTimer = Timer.periodic(interval, (timer) => _fetchMessages(isPolling: true));
   }
 
   void _tryLoadCachedMessages() {
@@ -112,6 +123,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final options = await _getSecureOptions();
       final response = await dio.get('$apiUrl/messages/${widget.matchId}', options: options);
+      _pollingFailures = 0;
       if (mounted) {
         final messages = List.from(response.data.reversed);
         setState(() {
@@ -128,6 +140,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     } catch (e) { 
+      _pollingFailures++;
+      _schedulePolling();
       debugPrint("Polling error: $e"); 
       if (mounted) setState(() => _isLoading = false); 
     }
@@ -179,6 +193,10 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(_scrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
     }
+  }
+
+  String _sanitizeMessage(String text) {
+    return text.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '');
   }
 
   @override
@@ -250,7 +268,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   crossAxisAlignment: WrapCrossAlignment.end,
                                   alignment: WrapAlignment.end,
                                   children: [
-                                    Text(msg['content'], style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                                    Text(_sanitizeMessage(msg['content']), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
                                     if (isMe && _isPremium) ...[
                                       const SizedBox(width: 8),
                                       Icon(

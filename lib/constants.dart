@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class AppConstants {
   // --- PRICING ---
   static const double premium1MonthPrice = 500.0;

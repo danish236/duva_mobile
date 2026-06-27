@@ -2,7 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 import 'screens/explore_screen.dart';
 import 'screens/admirers_screen.dart';
 import 'screens/premium_screen.dart'; 
@@ -13,9 +12,9 @@ import 'screens/login_screen.dart';
 import 'theme.dart';
 import 'theme_notifier.dart';
 import 'services/cache_service.dart';
+import 'services/api_service.dart';
 import 'constants.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +24,7 @@ void main() async {
     publishableKey: dotenv.get('SUPABASE_ANON_KEY'),
   );
   await CacheService().init();
+  ApiClient().init();
   runApp(const DuvaMobileApp());
 }
 
@@ -63,7 +63,7 @@ class MainLayout extends StatefulWidget {
   State<MainLayout> createState() => _MainLayoutState();
 }
 
-class _MainLayoutState extends State<MainLayout> {
+class _MainLayoutState extends State<MainLayout> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   bool _hasUnreadMessages = false;
   
@@ -78,7 +78,21 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    _checkUnreadStatus(); // This triggers the check as soon as the app loads
+    WidgetsBinding.instance.addObserver(this);
+    _checkUnreadStatus();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      CacheService().clearMemory();
+    }
   }
 
   Future<void> _checkUnreadStatus() async {

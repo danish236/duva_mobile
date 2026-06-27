@@ -9,11 +9,11 @@ import 'package:geocoding/geocoding.dart';
 import '../theme.dart'; 
 import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/profile_modal.dart';
 import '../constants.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -32,8 +32,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _hasMore = true;
   bool _isFetchingMore = false;
   int _todaySwipeCount = 0;
-  final dio = Dio();
-  final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+  final Dio dio = ApiClient().dio;
+  final String apiUrl = ApiClient.apiUrl;
   
   Future<void> _triggerRewind() async {
     if (!_isPremium) {

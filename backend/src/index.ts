@@ -14,20 +14,79 @@ type Bindings = {
 const POOL_BATCH_SIZE = 15;
 const MAX_MESSAGES_FETCH = 100;
 const MAX_MESSAGE_LENGTH = 1000;
+const DAILY_SWIPE_LIMIT = 40;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const ALLOWED_ORIGINS = ['https://duvamobile.workers.dev'];
 
 const app = new Hono<{ Bindings: Bindings }>();
-app.use('/*', cors());
 
-// --- SECURITY MIDDLEWARE ---
-// This grabs the Supabase Auth token sent by the Flutter app
+app.use('/*', async (c, next) => {
+  await cors({ origin: ALLOWED_ORIGINS })(c, next);
+  c.res.headers.set('X-Content-Type-Options', 'nosniff');
+  c.res.headers.set('X-Frame-Options', 'DENY');
+  c.res.headers.set('Strict-Transport-Security', 'max-age=31536000');
+  c.res.headers.set('Referrer-Policy', 'no-referrer');
+  c.res.headers.set('X-XSS-Protection', '1; mode=block');
+});
+
 const getSupabaseClient = (c: any) => {
   const authHeader = c.req.header('Authorization');
   if (!authHeader) throw new Error('Missing Auth Header');
-  
   return createClient(c.env.SUPABASE_URL, c.env.SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } }
   });
 };
+
+const checkMutualLike = async (supabase: any, userId: string, matchId: string) => {
+  if (!UUID_RE.test(matchId)) return false;
+  const { data: myLike } = await supabase
+    .from('swipes')
+    .select('id')
+    .eq('swiper_id', userId)
+    .eq('swiped_id', matchId)
+    .eq('action', 'like')
+    .maybeSingle();
+  if (!myLike) return false;
+  const { data: theirLike } = await supabase
+    .from('swipes')
+    .select('id')
+    .eq('swiper_id', matchId)
+    .eq('swiped_id', userId)
+    .eq('action', 'like')
+    .maybeSingle();
+  return !!theirLike;
+};
+
+const checkMessageAccess = async (supabase: any, userId: string, matchId: string) => {
+  if (!UUID_RE.test(matchId)) return false;
+  const { data: msg } = await supabase
+    .from('messages')
+    .select('id')
+    .or(`and(sender_id.eq.${userId},receiver_id.eq.${matchId}),and(sender_id.eq.${matchId},receiver_id.eq.${userId})`)
+    .maybeSingle();
+  const hasMessages = !!msg;
+  if (hasMessages) return true;
+  return checkMutualLike(supabase, userId, matchId);
+};
+
+const validateImageMagicBytes = (bytes: Uint8Array): boolean => {
+  if (bytes.length < 4) return false;
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return true;
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return true;
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return true;
+  return false;
+};
+
+const ALLOWED_GENDERS = ['male', 'female', 'non-binary', 'other', 'prefer not to say', 'male, female'];
+const ALLOWED_ZODIACS = ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo', 'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces', ''];
+const ALLOWED_YESNO = ['yes', 'no', 'sometimes', '', 'prefer not to say'];
+const ALLOWED_KIDS = ['yes', 'no', 'sometimes', '', 'prefer not to say'];
+const ALLOWED_WORKOUT = ['daily', 'weekly', 'occasionally', 'never', ''];
+const ALLOWED_EDUCATION = ['high school', 'associate', 'bachelor', 'master', 'phd', 'trade school', 'prefer not to say', ''];
+const ALLOWED_EXPECTATIONS = ['casual', 'serious', 'friends', 'still figuring out', 'anything', ''];
+const ALLOWED_PETS = ['yes', 'no', 'want them', 'allergic', ''];
 
 // --- 1. SECURE UPLOAD ROUTE WITH AI MODERATION ---
 app.post('/upload', async (c) => {
@@ -38,9 +97,13 @@ app.post('/upload', async (c) => {
 
     const formData = await c.req.formData();
     const file = formData.get('image');
-    
+
     if (!file || !(file instanceof File)) {
       return c.json({ error: 'Invalid file or no file uploaded' }, 400);
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return c.json({ error: 'File size exceeds maximum of 10MB.' }, 413);
     }
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
@@ -48,26 +111,29 @@ app.post('/upload', async (c) => {
       return c.json({ error: 'Only image uploads are allowed.' }, 400);
     }
 
-    // 🧠 THE AI MODERATION CHECK
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-    
-    // We convert the image to an array of numbers so the AI can read it
+
+    if (!validateImageMagicBytes(uint8Array)) {
+      return c.json({ error: 'Invalid image format. Only JPEG, PNG, and WebP are allowed.' }, 400);
+    }
+
     const ai = c.env.AI;
     const aiResponse = await ai.run('@cf/meta/llama-3.2-11b-vision-instruct', {
       prompt: "You are a Trust and Safety moderator. Look at this image. Is it NSFW (Not Safe For Work), sexually explicit, or containing nudity? Answer STRICTLY with 'YES' or 'NO'. Nothing else.",
-      image: [...uint8Array] 
+      image: [...uint8Array]
     });
 
-    // Read the AI's answer
     const isNSFW = aiResponse.response.toUpperCase().includes('YES');
 
     if (isNSFW) {
         return c.json({ error: 'NSFW Content Detected. Image rejected by Safety Engine.' }, 403);
     }
 
-    // ✅ If the AI says 'NO' (Safe), proceed to save to Cloudflare R2
-    const fileName = `profile_${user.id}_${Date.now()}`;
+    const rand = new Uint8Array(8);
+    crypto.getRandomValues(rand);
+    const randHex = Array.from(rand).map(b => b.toString(16).padStart(2, '0')).join('');
+    const fileName = `profile_${user.id}_${Date.now()}_${randHex}`;
     await c.env.duva_images.put(fileName, arrayBuffer, {
       httpMetadata: { contentType: file.type },
     });
@@ -76,7 +142,7 @@ app.post('/upload', async (c) => {
     return c.json({ url: publicUrl, success: true });
   } catch (e) {
     console.error("UPLOAD CRASH:", e);
-    return c.json({ error: 'Upload failed: ' + String(e) }, 500);
+    return c.json({ error: 'Upload failed. Please try again.' }, 500);
   }
 });
 
@@ -87,13 +153,12 @@ app.get('/pool', async (c) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const page = parseInt(c.req.query('page') || '0');
-    const limit = POOL_BATCH_SIZE; // Using your constant of 15
+    const page = Math.max(0, parseInt(c.req.query('page') || '0') || 0);
+    const limit = POOL_BATCH_SIZE;
     const offset = page * limit;
 
     const { data: myProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
-    // Call the database-level filtering function we just made
     const { data: rawPool, error } = await supabase.rpc('get_smart_pool', {
       my_id: user.id,
       my_lat: myProfile.lat,
@@ -108,16 +173,14 @@ app.get('/pool', async (c) => {
 
     if (error) throw error;
 
-    // Get My Interests
     const { data: myInterestsData } = await supabase.from('profile_interests').select('interest_id').eq('profile_id', user.id);
     const myInterests = (myInterestsData || []).map(i => i.interest_id);
 
     const scoredPool = [];
-    
-    // Iterate over 15 users
+
     for (const profile of (rawPool || [])) {
       const { data: theirInterests } = await supabase.from('profile_interests').select('interest_id, master_interests(name)').eq('profile_id', profile.id);
-      
+
       const theirInterestIds = (theirInterests || []).map((pi: any) => pi.interest_id);
       const theirInterestNames = (theirInterests || []).map((pi: any) => pi.master_interests?.name);
       const sharedCount = theirInterestIds.filter((id: number) => myInterests.includes(id)).length;
@@ -127,7 +190,7 @@ app.get('/pool', async (c) => {
         firstName: profile.first_name,
         age: profile.dob ? Math.floor((Date.now() - new Date(profile.dob).getTime()) / 31557600000) : 18,
         location: profile.location,
-        distance: Math.round(profile.distance), 
+        distance: Math.round(profile.distance),
         bio: profile.bio,
         expectations: profile.expectations,
         currentDateBid: profile.current_date_bid,
@@ -138,9 +201,8 @@ app.get('/pool', async (c) => {
       });
     }
 
-    // Sort users by shared interests
     scoredPool.sort((a, b) => b.sharedInterestsCount - a.sharedInterestsCount);
-    
+
     return c.json({
         data: scoredPool,
         nextPage: (rawPool && rawPool.length === limit) ? page + 1 : null
@@ -151,43 +213,42 @@ app.get('/pool', async (c) => {
   }
 });
 
-// --- ADD THIS TO YOUR index.ts ---
+// --- 3. ADMIRERS ROUTE (Premium-gated) ---
 app.get('/matches', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // 🔒 VAPT FIX: Add pagination and limits to Admirers
-    const page = parseInt(c.req.query('page') || '0');
+    const page = Math.max(0, parseInt(c.req.query('page') || '0') || 0);
     const limit = 20;
     const offset = page * limit;
 
+    const { data: myProfile } = await supabase.from('profiles').select('is_premium').eq('id', user.id).single();
+    const isPremium = myProfile?.is_premium ?? false;
+
     const { data, error } = await supabase
       .from('swipes')
-      .select('profiles!swipes_swiper_id_fkey(*)') 
+      .select('profiles!swipes_swiper_id_fkey(*)')
       .eq('swiped_id', user.id)
       .eq('action', 'like')
-      .range(offset, offset + limit - 1); // Only fetch 20 at a time!
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    
-    // ✅ Map snake_case to camelCase so Flutter doesn't crash
+
     const admirers = (data || []).map((d: any) => d.profiles).filter(Boolean).map((p: any) => ({
         id: p.id,
-        firstName: p.first_name,
-        // Calculate age on the fly
-        age: p.dob ? Math.floor((Date.now() - new Date(p.dob).getTime()) / 31557600000) : 18,
-        location: p.location,
-        bio: p.bio,
-        expectations: p.expectations,
-        currentDateBid: p.current_date_bid, 
-        images: p.images || [],
-        distance: 0, 
-        interests: [] 
+        firstName: isPremium ? p.first_name : 'Admirer',
+        age: p.dob && isPremium ? Math.floor((Date.now() - new Date(p.dob).getTime()) / 31557600000) : 0,
+        location: isPremium ? p.location : 'Hidden',
+        bio: isPremium ? p.bio : null,
+        expectations: isPremium ? p.expectations : null,
+        currentDateBid: isPremium ? p.current_date_bid : null,
+        images: isPremium ? (p.images || []) : [],
+        distance: 0,
+        interests: []
     }));
 
-    // Return with pagination token
     return c.json({
         data: admirers,
         nextPage: (data && data.length === limit) ? page + 1 : null
@@ -198,7 +259,7 @@ app.get('/matches', async (c) => {
   }
 });
 
-// --- 3. THE SWIPE ROUTE (Updated with Notifications) ---
+// --- 4. THE SWIPE ROUTE (With Premium Enforcement + Daily Limit) ---
 app.post('/swipe', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -206,35 +267,53 @@ app.post('/swipe', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const { swiped_id, action } = await c.req.json();
-
     if (user.id === swiped_id) return c.json({ error: 'Cannot swipe yourself.' }, 400);
+    if (!UUID_RE.test(swiped_id)) return c.json({ error: 'Invalid user ID' }, 400);
 
-    // ⚡ THE SUPERLIKE LOGIC
+    const { data: targetExists } = await supabase.from('profiles').select('id').eq('id', swiped_id).maybeSingle();
+    if (!targetExists) return c.json({ error: 'User not found' }, 404);
+
+    const { data: myProfile } = await supabase.from('profiles').select('is_premium, superlikes_balance').eq('id', user.id).single();
+    const isPremium = myProfile?.is_premium ?? false;
+
+    if (!isPremium && action !== 'superlike') {
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+      const { count } = await supabase
+        .from('swipes')
+        .select('id', { count: 'exact', head: true })
+        .eq('swiper_id', user.id)
+        .gte('created_at', startOfDay);
+      if (count && count >= DAILY_SWIPE_LIMIT) {
+        return c.json({ error: 'Daily swipe limit reached. Upgrade to Duva Black for unlimited swipes.' }, 403);
+      }
+    }
+
     if (action === 'superlike') {
-      const { data: myProfile } = await supabase.from('profiles').select('superlikes_balance').eq('id', user.id).single();
-      
-      // If balance is 0, trigger the frontend to show the Purchase Screen
-      if (!myProfile || myProfile.superlikes_balance <= 0) {
-        return c.json({ error: 'Out of Superlikes', outOfBalance: true }, 402); // 402 Payment Required
+      const { data: updated } = await supabase
+        .from('profiles')
+        .update({ superlikes_balance: (myProfile?.superlikes_balance ?? 0) - 1 })
+        .eq('id', user.id)
+        .gt('superlikes_balance', 0)
+        .select('superlikes_balance')
+        .single();
+
+      if (!updated) {
+        return c.json({ error: 'Out of Superlikes', outOfBalance: true }, 402);
       }
 
-      // Deduct 1 Superlike
-      await supabase.from('profiles').update({ superlikes_balance: myProfile.superlikes_balance - 1 }).eq('id', user.id);
-      
-      // Notify the receiver INSTANTLY
       await supabase.from('notifications').insert({
-         user_id: swiped_id, 
-         type: 'superlike', 
-         title: '⚡ You received a Super Alignment!', 
-         message: 'Someone really stands out. Check your pool now.' 
+         user_id: swiped_id,
+         type: 'superlike',
+         title: '⚡ You received a Super Alignment!',
+         message: 'Someone really stands out. Check your pool now.'
       });
     }
 
-    // Insert the swipe
     await supabase.from('swipes').insert({
       swiper_id: user.id,
       swiped_id: swiped_id,
-      action: action // 'like', 'pass', or 'superlike'
+      action: action
     });
 
     let isMatch = false;
@@ -245,22 +324,20 @@ app.post('/swipe', async (c) => {
         .eq('swiper_id', swiped_id)
         .eq('swiped_id', user.id)
         .eq('action', 'like')
-        .single();
-        
+        .maybeSingle();
+
       if (mutualSwipe) {
         isMatch = true;
-        // Generate Match Notifications for BOTH users
         await supabase.from('notifications').insert([
           { user_id: swiped_id, type: 'match', title: '✨ Zenith Alignment!', message: 'Someone you liked liked you back.' },
           { user_id: user.id, type: 'match', title: '✨ Zenith Alignment!', message: 'You matched with a new profile.' }
         ]);
       } else {
-        // Generate a "Blind Like" Notification for the receiver
         await supabase.from('notifications').insert({
-           user_id: swiped_id, 
-           type: 'like', 
-           title: 'Someone likes you!', 
-           message: 'Keep swiping in the pool to find out who.' 
+           user_id: swiped_id,
+           type: 'like',
+           title: 'Someone likes you!',
+           message: 'Keep swiping in the pool to find out who.'
         });
       }
     }
@@ -272,7 +349,7 @@ app.post('/swipe', async (c) => {
   }
 });
 
-// GET: Generate AI Icebreakers for an empty chat
+// --- 5. AI ICEBREAKERS (With Match Ownership Check) ---
 app.get('/matches/:match_id/icebreakers', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -280,32 +357,30 @@ app.get('/matches/:match_id/icebreakers', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const matchId = c.req.param('match_id');
+    const isMutual = await checkMutualLike(supabase, user.id, matchId);
+    if (!isMutual) return c.json({ error: 'Not authorized' }, 403);
 
-    // 1. Fetch Interests for both users
     const { data: myInterests } = await supabase.from('profile_interests').select('master_interests(name)').eq('profile_id', user.id);
     const { data: theirInterests } = await supabase.from('profile_interests').select('master_interests(name)').eq('profile_id', matchId);
 
     const myTags = myInterests?.map((i: any) => i.master_interests?.name).join(', ') || 'nothing specific';
     const theirTags = theirInterests?.map((i: any) => i.master_interests?.name).join(', ') || 'nothing specific';
 
-    // 2. Call Cloudflare Text AI
     const ai = c.env.AI;
     const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
       messages: [
-        { 
-          role: "system", 
-          content: "You are a witty dating assistant. Your job is to write 3 short, clever, and engaging opening messages for a dating app. Base them on the shared or unique interests of the users. Return EXACTLY a JSON array of 3 strings. Do not include markdown, greetings, or explanations. Example: [\"text 1\", \"text 2\", \"text 3\"]" 
+        {
+          role: "system",
+          content: "You are a witty dating assistant. Your job is to write 3 short, clever, and engaging opening messages for a dating app. Base them on the shared or unique interests of the users. Return EXACTLY a JSON array of 3 strings. Do not include markdown, greetings, or explanations. Example: [\"text 1\", \"text 2\", \"text 3\"]"
         },
-        { 
-          role: "user", 
-          content: `My interests: ${myTags}. Their interests: ${theirTags}. Generate 3 icebreakers.` 
+        {
+          role: "user",
+          content: `My interests: ${myTags}. Their interests: ${theirTags}. Generate 3 icebreakers.`
         }
       ]
     });
 
-    // 3. Clean and parse the LLM's response
     let rawText = (aiResponse.response as string).trim();
-    // Sometimes LLMs wrap JSON in markdown blocks, we must strip it safely
     if (rawText.startsWith('```json')) rawText = rawText.replace(/```json/g, '');
     if (rawText.startsWith('```')) rawText = rawText.replace(/```/g, '');
     rawText = rawText.trim();
@@ -314,7 +389,6 @@ app.get('/matches/:match_id/icebreakers', async (c) => {
       const icebreakers = JSON.parse(rawText);
       return c.json(icebreakers);
     } catch (parseError) {
-      // Fallback if the AI hallucinates bad JSON
       return c.json([
         "I saw your profile and had to say hi!",
         "What's the best thing that happened to you this week?",
@@ -328,9 +402,8 @@ app.get('/matches/:match_id/icebreakers', async (c) => {
   }
 });
 
-// --- 5. STATELESS CHAT POLLING (Saves WebSocket Limits) ---
+// --- 6. STATELESS CHAT POLLING (With Match Ownership Check) ---
 
-// GET: Fetch conversation history
 app.get('/messages/:match_id', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -338,14 +411,15 @@ app.get('/messages/:match_id', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const matchId = c.req.param('match_id');
+    const hasAccess = await checkMessageAccess(supabase, user.id, matchId);
+    if (!hasAccess) return c.json({ error: 'Not authorized' }, 403);
 
-    // Fetch messages where I am sender & they are receiver, OR they are sender & I am receiver
     const { data: messages, error } = await supabase
       .from('messages')
       .select('id, sender_id, content, created_at, is_read')
       .or(`and(sender_id.eq.${user.id},receiver_id.eq.${matchId}),and(sender_id.eq.${matchId},receiver_id.eq.${user.id})`)
       .order('created_at', { ascending: false })
-      .limit(100); 
+      .limit(MAX_MESSAGES_FETCH);
 
     if (error) throw error;
     return c.json(messages || []);
@@ -354,7 +428,6 @@ app.get('/messages/:match_id', async (c) => {
   }
 });
 
-// POST: Send a new message
 app.post('/messages/:match_id', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -362,12 +435,13 @@ app.post('/messages/:match_id', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const matchId = c.req.param('match_id');
+    const isMutual = await checkMutualLike(supabase, user.id, matchId);
+    if (!isMutual) return c.json({ error: 'Not authorized' }, 403);
+
     const { content } = await c.req.json();
-
     if (!content || content.trim() === '') return c.json({ error: 'Empty message' }, 400);
-
-    if (content.length > 1000) {
-        return c.json({ error: 'Message exceeds maximum length of 1000 characters.' }, 413);
+    if (content.length > MAX_MESSAGE_LENGTH) {
+        return c.json({ error: 'Message exceeds maximum length.' }, 413);
     }
 
     const { error } = await supabase.from('messages').insert({
@@ -383,7 +457,7 @@ app.post('/messages/:match_id', async (c) => {
   }
 });
 
-// GET: Fetch real notifications from Supabase
+// --- 7. NOTIFICATIONS ---
 app.get('/notifications', async (c) => {
   const supabase = getSupabaseClient(c);
   const { data: { user } } = await supabase.auth.getUser();
@@ -391,15 +465,17 @@ app.get('/notifications', async (c) => {
 
   const { data, error } = await supabase
     .from('notifications')
-    .select('*')
+    .select('id, type, title, message, is_read, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
-  if (error) return c.json({ error: error.message }, 500);
+  if (error) {
+    console.error('Notifications fetch error:', error.message);
+    return c.json({ error: 'Failed to fetch notifications' }, 500);
+  }
   return c.json(data);
 });
 
-// PATCH: Mark all as read
 app.patch('/notifications/read', async (c) => {
   const supabase = getSupabaseClient(c);
   const { data: { user } } = await supabase.auth.getUser();
@@ -411,12 +487,14 @@ app.patch('/notifications/read', async (c) => {
     .eq('user_id', user.id)
     .eq('is_read', false);
 
-  if (error) return c.json({ error: error.message }, 500);
+  if (error) {
+    console.error('Notifications read error:', error.message);
+    return c.json({ error: 'Failed to mark notifications as read' }, 500);
+  }
   return c.json({ success: true });
 });
 
-// --- 7. SAVE PREFERENCES ---
-// --- 7. SAVE PREFERENCES ---
+// --- 8. SAVE PREFERENCES ---
 app.post('/preferences', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -425,27 +503,23 @@ app.post('/preferences', async (c) => {
 
     const { min_age, max_age, filter_expectation, max_distance } = await c.req.json();
 
-    // 🔒 SECURITY FIX: Server-Side Data Validation
-    // 1. Enforce POCSO / DPDP Age Compliance
     if (min_age !== undefined && typeof min_age === 'number' && min_age < 18) {
       return c.json({ error: 'Critical Security: Minimum age must be 18+.' }, 403);
     }
-    
-    // 2. Prevent Logic Manipulation
+
     if (min_age !== undefined && max_age !== undefined && max_age < min_age) {
       return c.json({ error: 'Maximum age cannot be lower than minimum age.' }, 400);
     }
 
-    // 3. Prevent Server Load Attacks (e.g., sending distance: 9999999 to crash the haversine query)
     if (max_distance !== undefined && (max_distance < 1 || max_distance > 500)) {
        return c.json({ error: 'Distance must be between 1km and 500km.' }, 400);
     }
 
-    const { error } = await supabase.from('profiles').update({ 
-        min_age: min_age, 
-        max_age: max_age, 
-        max_distance: max_distance, 
-        filter_expectation: filter_expectation === 'Any' ? null : filter_expectation 
+    const { error } = await supabase.from('profiles').update({
+        min_age: min_age,
+        max_age: max_age,
+        max_distance: max_distance,
+        filter_expectation: filter_expectation === 'Any' ? null : filter_expectation
     }).eq('id', user.id);
 
     if (error) throw error;
@@ -456,19 +530,21 @@ app.post('/preferences', async (c) => {
   }
 });
 
-// --- 8. ACCOUNT MANAGEMENT (Settings) ---
+// --- 9. ACCOUNT MANAGEMENT ---
 app.delete('/account', async (c) => {
   try {
-    const supabase = getSupabaseClient(c); // Standard client for checking who requested it
+    const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // ✅ FIX: Create an Admin Client to delete the actual Auth User
+    const lastSignIn = new Date(user.last_sign_in_at || 0).getTime();
+    if (Date.now() - lastSignIn > 5 * 60 * 1000) {
+      return c.json({ error: 'Please re-authenticate before deleting your account. Sign out and sign back in.' }, 403);
+    }
+
     const adminSupabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
-    
-    // Deleting the auth user automatically cascades and deletes their 'profiles' row if your DB foreign keys are set up correctly.
     const { error } = await adminSupabase.auth.admin.deleteUser(user.id);
-    
+
     if (error) throw error;
     return c.json({ success: true, message: 'Account wiped successfully' });
   } catch (e) {
@@ -477,14 +553,16 @@ app.delete('/account', async (c) => {
   }
 });
 
-// --- 9. TRUST & SAFETY ---
+// --- 10. TRUST & SAFETY ---
 
-// GET: Fetch master reasons
 app.get('/reasons', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
-    const type = c.req.query('type'); // 'block' or 'report'
-    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const type = c.req.query('type');
+
     let query = supabase.from('master_report_reasons').select('*');
     if (type) query = query.eq('category', type);
 
@@ -492,11 +570,11 @@ app.get('/reasons', async (c) => {
     if (error) throw error;
     return c.json(data);
   } catch (e) {
+    console.error('Reasons fetch error:', e);
     return c.json({ error: 'Failed to fetch reasons' }, 500);
   }
 });
 
-// POST: Block a user
 app.post('/block', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -504,6 +582,15 @@ app.post('/block', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const { blocked_id, reason_id } = await c.req.json();
+    if (!UUID_RE.test(blocked_id)) return c.json({ error: 'Invalid user ID' }, 400);
+
+    const { data: target } = await supabase.from('profiles').select('id').eq('id', blocked_id).maybeSingle();
+    if (!target) return c.json({ error: 'User not found' }, 404);
+
+    if (reason_id) {
+      const { data: reason } = await supabase.from('master_report_reasons').select('id').eq('id', reason_id).maybeSingle();
+      if (!reason) return c.json({ error: 'Invalid reason' }, 400);
+    }
 
     await supabase.from('blocks').insert({
       blocker_id: user.id,
@@ -511,7 +598,6 @@ app.post('/block', async (c) => {
       reason_id: reason_id
     });
 
-    // We also insert a "Pass" swipe so they never appear in the pool query logic again
     await supabase.from('swipes').insert({ swiper_id: user.id, swiped_id: blocked_id, action: 'pass' });
 
     return c.json({ success: true });
@@ -520,7 +606,6 @@ app.post('/block', async (c) => {
   }
 });
 
-// POST: Report a user
 app.post('/report', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -528,15 +613,22 @@ app.post('/report', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const { reported_id, reason_id } = await c.req.json();
+    if (!UUID_RE.test(reported_id)) return c.json({ error: 'Invalid user ID' }, 400);
 
-    // 1. Log the report for the Admin Panel
+    const { data: target } = await supabase.from('profiles').select('id').eq('id', reported_id).maybeSingle();
+    if (!target) return c.json({ error: 'User not found' }, 404);
+
+    if (reason_id) {
+      const { data: reason } = await supabase.from('master_report_reasons').select('id').eq('id', reason_id).maybeSingle();
+      if (!reason) return c.json({ error: 'Invalid reason' }, 400);
+    }
+
     await supabase.from('reports').insert({
       reporter_id: user.id,
       reported_id: reported_id,
       reason_id: reason_id
     });
 
-    // 2. Automatically block them so the user is safe immediately
     await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: reported_id, reason_id: reason_id });
     await supabase.from('swipes').insert({ swiper_id: user.id, swiped_id: reported_id, action: 'pass' });
 
@@ -546,7 +638,7 @@ app.post('/report', async (c) => {
   }
 });
 
-// --- 10. UPDATE LOCATION ---
+// --- 11. UPDATE LOCATION ---
 app.post('/location', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -555,16 +647,15 @@ app.post('/location', async (c) => {
 
     const { lat, lng, city } = await c.req.json();
 
-    // 🔒 SECURITY FIX: Geographic boundary validation
     if (typeof lat !== 'number' || typeof lng !== 'number' || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
        return c.json({ error: 'Invalid geographic coordinates provided.' }, 400);
     }
 
-    await supabase.from('profiles').update({ 
-      lat: lat, 
-      lng: lng, 
+    await supabase.from('profiles').update({
+      lat: lat,
+      lng: lng,
       location: city ? String(city).substring(0, 50) : 'Unknown',
-      last_seen: new Date().toISOString() // 🟢 Heartbeat refreshed!
+      last_seen: new Date().toISOString()
     }).eq('id', user.id);
 
     return c.json({ success: true });
@@ -573,14 +664,18 @@ app.post('/location', async (c) => {
   }
 });
 
-// --- REWIND ROUTE (Premium) ---
+// --- 12. REWIND ROUTE (Premium Only) ---
 app.post('/rewind', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    // Get the absolute last swipe they made
+    const { data: myProfile } = await supabase.from('profiles').select('is_premium').eq('id', user.id).single();
+    if (!myProfile?.is_premium) {
+      return c.json({ error: 'Rewind is a Duva Black feature. Upgrade to continue.' }, 403);
+    }
+
     const { data: lastSwipe, error } = await supabase
       .from('swipes')
       .select('id, action, swiped_id')
@@ -591,7 +686,6 @@ app.post('/rewind', async (c) => {
 
     if (error || !lastSwipe) return c.json({ error: 'No swipes to rewind' }, 400);
 
-    // ✅ FIX: Check if it was a mutual match before allowing deletion
     if (lastSwipe.action === 'like') {
         const { data: mutual } = await supabase
             .from('swipes')
@@ -599,12 +693,11 @@ app.post('/rewind', async (c) => {
             .eq('swiper_id', lastSwipe.swiped_id)
             .eq('swiped_id', user.id)
             .eq('action', 'like')
-            .single();
-        
+            .maybeSingle();
+
         if (mutual) return c.json({ error: 'Cannot rewind an alignment.' }, 403);
     }
 
-    // Delete it so the profile returns to the pool
     await supabase.from('swipes').delete().eq('id', lastSwipe.id);
 
     return c.json({ success: true });
@@ -613,24 +706,25 @@ app.post('/rewind', async (c) => {
   }
 });
 
-// --- 11. THE PROFILE GATEKEEPER ---
+// --- 13. THE PROFILE GATEKEEPER (All fields, with validation) ---
 app.post('/profile', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { firstName, lastName, bio, dob, gender, lookingFor, images, expectations } = await c.req.json();
+    const { firstName, lastName, bio, dob, gender, lookingFor, images, expectations, work, education, location, currentDateBid, height, weight, smoking, drinking, workout, pets, zodiac, kids } = await c.req.json();
 
-    // 1. 🛡️ PROFANITY & SPAM SANITIZER
-    // Blocks slurs, solicitation, and external handles (Insta, Telegram, OnlyFans, Snap)
+    // 1. Profanity filter on all text fields
     const spamRegex = /(fuck|shit|bitch|cunt|nigger|onlyfans|only fans|t\.me|telegram|insta|ig:|snapchat|sc:|\@)/i;
-    if (spamRegex.test(bio || '') || spamRegex.test(firstName || '')) {
-      return c.json({ error: 'Profile text contains prohibited language or social handles.' }, 400);
+    const textFields = [bio, firstName, work, location, currentDateBid, education, expectations].filter(Boolean);
+    for (const field of textFields) {
+      if (spamRegex.test(String(field))) {
+        return c.json({ error: 'Profile text contains prohibited language or social handles.' }, 400);
+      }
     }
 
-    // 2. 🛡️ THE IMAGE DOMAIN LOCK (The ultimate hack-killer)
-    // Forces 100% of image URLs to belong to YOUR Cloudflare R2 bucket. 
+    // 2. Image domain lock
     const validImages = (images || []).filter((url: string) => {
       return typeof url === 'string' && url.startsWith(c.env.R2_PUBLIC_URL);
     });
@@ -639,25 +733,89 @@ app.post('/profile', async (c) => {
       return c.json({ error: 'You must provide at least 1 valid Duva photograph.' }, 400);
     }
 
-    // 3. 🛡️ SERVER-SIDE AGE ENFORCEMENT (Prevents dob tampering)
-    const birthDate = new Date(dob);
-    const age = Math.floor((Date.now() - birthDate.getTime()) / 31557600000);
-    if (age < 18 || age > 99) {
-      return c.json({ error: 'You must be 18+ to use Duva.' }, 403);
+    // 3. Age enforcement
+    if (dob) {
+      const birthDate = new Date(dob);
+      const age = Math.floor((Date.now() - birthDate.getTime()) / 31557600000);
+      if (age < 18 || age > 99) {
+        return c.json({ error: 'You must be 18+ to use Duva.' }, 403);
+      }
     }
 
-    // 4. Safe to commit to DB
-    const { error } = await supabase.from('profiles').upsert({
-      id: user.id,
-      first_name: String(firstName).trim().substring(0, 30),
-      last_name: lastName ? String(lastName).trim().substring(0, 30) : null,
-      bio: bio ? String(bio).trim().substring(0, 300) : '',
-      dob: dob,
-      gender: gender,
-      looking_for_gender: lookingFor,
-      images: validImages, // Only accepts the locked-down R2 urls
-      expectations: expectations
-    });
+    // 4. Validate enum fields
+    if (gender !== undefined && gender !== null) {
+      const g = String(gender).toLowerCase();
+      if (!ALLOWED_GENDERS.includes(g)) return c.json({ error: 'Invalid gender value' }, 400);
+    }
+    if (lookingFor !== undefined && lookingFor !== null) {
+      const lf = String(lookingFor).toLowerCase();
+      if (!ALLOWED_GENDERS.includes(lf)) return c.json({ error: 'Invalid lookingFor value' }, 400);
+    }
+    if (zodiac !== undefined && zodiac !== null) {
+      const z = String(zodiac).toLowerCase().trim();
+      if (!ALLOWED_ZODIACS.includes(z)) return c.json({ error: 'Invalid zodiac value' }, 400);
+    }
+    if (smoking !== undefined && smoking !== null) {
+      const s = String(smoking).toLowerCase().trim();
+      if (!ALLOWED_YESNO.includes(s)) return c.json({ error: 'Invalid smoking value' }, 400);
+    }
+    if (drinking !== undefined && drinking !== null) {
+      const d = String(drinking).toLowerCase().trim();
+      if (!ALLOWED_YESNO.includes(d)) return c.json({ error: 'Invalid drinking value' }, 400);
+    }
+    if (workout !== undefined && workout !== null) {
+      const w = String(workout).toLowerCase().trim();
+      if (!ALLOWED_WORKOUT.includes(w)) return c.json({ error: 'Invalid workout value' }, 400);
+    }
+    if (pets !== undefined && pets !== null) {
+      const p = String(pets).toLowerCase().trim();
+      if (!ALLOWED_PETS.includes(p)) return c.json({ error: 'Invalid pets value' }, 400);
+    }
+    if (kids !== undefined && kids !== null) {
+      const k = String(kids).toLowerCase().trim();
+      if (!ALLOWED_KIDS.includes(k)) return c.json({ error: 'Invalid kids value' }, 400);
+    }
+    if (education !== undefined && education !== null) {
+      const e = String(education).toLowerCase().trim();
+      if (!ALLOWED_EDUCATION.includes(e)) return c.json({ error: 'Invalid education value' }, 400);
+    }
+    if (expectations !== undefined && expectations !== null) {
+      const ex = String(expectations).toLowerCase().trim();
+      if (!ALLOWED_EXPECTATIONS.includes(ex)) return c.json({ error: 'Invalid expectations value' }, 400);
+    }
+    if (height !== undefined && height !== null) {
+      const h = String(height).trim();
+      if (h.length > 20) return c.json({ error: 'Invalid height value' }, 400);
+    }
+    if (weight !== undefined && weight !== null) {
+      const w = String(weight).trim();
+      if (w.length > 20) return c.json({ error: 'Invalid weight value' }, 400);
+    }
+
+    // 5. Commit to DB
+    const updateData: any = { id: user.id };
+    if (firstName !== undefined) updateData.first_name = String(firstName).trim().substring(0, 30);
+    if (lastName !== undefined) updateData.last_name = lastName ? String(lastName).trim().substring(0, 30) : null;
+    if (bio !== undefined) updateData.bio = bio ? String(bio).trim().substring(0, 300) : '';
+    if (dob !== undefined) updateData.dob = dob;
+    if (gender !== undefined) updateData.gender = gender;
+    if (lookingFor !== undefined) updateData.looking_for_gender = lookingFor;
+    if (images !== undefined) updateData.images = validImages;
+    if (expectations !== undefined) updateData.expectations = expectations;
+    if (work !== undefined) updateData.work = work ? String(work).trim().substring(0, 100) : null;
+    if (education !== undefined) updateData.education = education;
+    if (location !== undefined) updateData.location = location ? String(location).trim().substring(0, 100) : 'Unknown Location';
+    if (currentDateBid !== undefined) updateData.current_date_bid = currentDateBid ? String(currentDateBid).trim().substring(0, 200) : null;
+    if (height !== undefined) updateData.height = height;
+    if (weight !== undefined) updateData.weight = weight;
+    if (smoking !== undefined) updateData.smoking = smoking;
+    if (drinking !== undefined) updateData.drinking = drinking;
+    if (workout !== undefined) updateData.workout = workout;
+    if (pets !== undefined) updateData.pets = pets;
+    if (zodiac !== undefined) updateData.zodiac = zodiac;
+    if (kids !== undefined) updateData.kids = kids;
+
+    const { error } = await supabase.from('profiles').upsert(updateData);
 
     if (error) throw error;
     return c.json({ success: true });
@@ -667,7 +825,7 @@ app.post('/profile', async (c) => {
   }
 });
 
-// --- TRUST & SAFETY: TEXT MODERATION ---
+// --- 14. TRUST & SAFETY: TEXT MODERATION ---
 app.post('/moderate-text', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -675,8 +833,7 @@ app.post('/moderate-text', async (c) => {
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
     const { text } = await c.req.json();
-    
-    // If empty, nothing to moderate
+
     if (!text || typeof text !== 'string' || text.trim() === '') {
       return c.json({ isClean: true });
     }
@@ -684,31 +841,28 @@ app.post('/moderate-text', async (c) => {
     const ai = c.env.AI;
     const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
       messages: [
-        { 
-          role: "system", 
-          content: "You are a highly strict Trust & Safety automated filter for a premium dating app. Read the user input. If it contains profanity, slurs, explicit sexual requests, severe toxicity, or insults, reply STRICTLY with 'DIRTY'. If it is completely clean and safe, reply STRICTLY with 'CLEAN'. Do not explain your answer." 
+        {
+          role: "system",
+          content: "You are a highly strict Trust & Safety automated filter for a premium dating app. Read the user input. If it contains profanity, slurs, explicit sexual requests, severe toxicity, or insults, reply STRICTLY with 'DIRTY'. If it is completely clean and safe, reply STRICTLY with 'CLEAN'. Do not explain your answer."
         },
-        { 
-          role: "user", 
-          content: text 
+        {
+          role: "user",
+          content: text
         }
       ]
     });
 
     const responseText = (aiResponse.response as string).toUpperCase();
-    
-    // If the AI flags it as dirty, return false
     const isClean = !responseText.includes('DIRTY');
 
     return c.json({ isClean });
   } catch (e) {
     console.error("Moderation Error:", e);
-    // Fail open if the AI is down, so users aren't permanently locked out of saving
-    return c.json({ isClean: true }); 
+    return c.json({ isClean: false });
   }
 });
 
-// --- 12. AI BIO GENERATION (Once per week) ---
+// --- 15. AI BIO GENERATION (Once per week) ---
 app.post('/generate-bio', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -717,7 +871,6 @@ app.post('/generate-bio', async (c) => {
 
     const { interests, work, education, expectations, current_bio } = await c.req.json();
 
-    // 1. Check 7-day cooldown
     const { data: profile } = await supabase
       .from('profiles')
       .select('last_bio_generation_at')
@@ -733,7 +886,6 @@ app.post('/generate-bio', async (c) => {
       }
     }
 
-    // 2. Generate 3 bios via Cloudflare AI
     const ai = c.env.AI;
     const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
       messages: [
@@ -765,7 +917,6 @@ app.post('/generate-bio', async (c) => {
       ];
     }
 
-    // 3. Update cooldown timestamp
     await supabase
       .from('profiles')
       .update({ last_bio_generation_at: new Date().toISOString() })

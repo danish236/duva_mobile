@@ -8,11 +8,11 @@ import 'package:geocoding/geocoding.dart';
 import '../main.dart'; 
 import '../theme.dart';
 import '../constants.dart';
-import 'package:dio/dio.dart' as dio_pkg;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:dio/dio.dart';
 import '../services/compliance_engine.dart';
 import '../services/cache_service.dart';
 import '../services/image_service.dart';
+import '../services/api_service.dart';
 
 enum _ImageState { idle, checking, rejected }
 
@@ -135,10 +135,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  Future<dio_pkg.Options> _getSecureOptions() async { // ✅ Added dio_pkg. prefix
+  Future<Options> _getSecureOptions() async {
     try { await Supabase.instance.client.auth.refreshSession(); } catch (_) {}
     final session = Supabase.instance.client.auth.currentSession;
-    return dio_pkg.Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}); // ✅ Added dio_pkg. prefix
+    return Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
   }
 
   Future<void> _completeOnboarding() async {
@@ -180,8 +180,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     
     try {
       final user = Supabase.instance.client.auth.currentUser!;
-      final dioClient = dio_pkg.Dio();
-      final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+      final dioClient = ApiClient().dio;
+      final String apiUrl = ApiClient.apiUrl;
 
       // 1. Upload images with AI moderation checking states
       List<String> imageUrls = [];

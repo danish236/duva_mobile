@@ -37,29 +37,36 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
 
   void _checkPasswordStrength() {
     String password = _passwordController.text;
+    final hasUpperCase = password.contains(RegExp(r'[A-Z]'));
+    final hasLowerCase = password.contains(RegExp(r'[a-z]'));
+    final hasDigit = password.contains(RegExp(r'[0-9]'));
+    final hasSpecial = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
     if (password.isEmpty) setState(() => _passwordStrength = 0);
-    else if (password.length < 6) setState(() => _passwordStrength = 1);
-    else if (password.length >= 6 && password.length < 10 && !password.contains(RegExp(r'[0-9]'))) setState(() => _passwordStrength = 2);
-    else setState(() => _passwordStrength = 3);
+    else if (password.length < 8) setState(() => _passwordStrength = 1);
+    else if (password.length >= 8 && !(hasUpperCase && hasLowerCase && hasDigit)) setState(() => _passwordStrength = 2);
+    else if (password.length >= 8 && hasUpperCase && hasLowerCase && hasDigit && !hasSpecial) setState(() => _passwordStrength = 3);
+    else setState(() => _passwordStrength = 4);
   }
 
   Color _getStrengthColor() {
     if (_passwordStrength == 1) return Colors.redAccent;
-    if (_passwordStrength == 2) return AppTheme.electricCyan;
-    if (_passwordStrength == 3) return Colors.greenAccent;
+    if (_passwordStrength == 2) return Colors.orangeAccent;
+    if (_passwordStrength == 3) return AppTheme.electricCyan;
+    if (_passwordStrength == 4) return Colors.greenAccent;
     return AppTheme.surfaceGlass;
   }
 
   String _getStrengthText() {
-    if (_passwordStrength == 1) return 'TOO SHORT';
-    if (_passwordStrength == 2) return 'GOOD - ADD NUMBERS FOR STRONG';
-    if (_passwordStrength == 3) return 'SECURE PASSWORD';
-    return 'MINIMUM 6 CHARACTERS';
+    if (_passwordStrength == 1) return 'TOO SHORT (MIN 8 CHARS)';
+    if (_passwordStrength == 2) return 'WEAK - ADD UPPERCASE, LOWERCASE & DIGIT';
+    if (_passwordStrength == 3) return 'GOOD - ADD SPECIAL CHAR FOR STRONG';
+    if (_passwordStrength == 4) return 'SECURE PASSWORD';
+    return 'MINIMUM 8 CHARACTERS';
   }
 
   Future<void> _signUp() async {
-    if (_passwordStrength == 1) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password is too weak.')));
+    if (_passwordStrength < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password must be at least 8 characters with uppercase, lowercase, and a number.')));
       return;
     }
 
@@ -73,9 +80,20 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
       ));
     } on AuthException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      String msg;
+      switch (e.message) {
+        case 'User already registered':
+          msg = 'An account with this email already exists.';
+          break;
+        case 'Password should be at least 6 characters':
+          msg = 'Password must be at least 8 characters long.';
+          break;
+        default:
+          msg = e.message;
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -129,10 +147,12 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
               Row(
                 children: [
                   Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 1 ? _getStrengthColor() : AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(2), boxShadow: _passwordStrength >= 1 ? [BoxShadow(color: _getStrengthColor().withValues(alpha: 0.5), blurRadius: 4)] : []))),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 2 ? _getStrengthColor() : AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(2), boxShadow: _passwordStrength >= 2 ? [BoxShadow(color: _getStrengthColor().withValues(alpha: 0.5), blurRadius: 4)] : []))),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 3 ? _getStrengthColor() : AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(2), boxShadow: _passwordStrength >= 3 ? [BoxShadow(color: _getStrengthColor().withValues(alpha: 0.5), blurRadius: 4)] : []))),
+                  const SizedBox(width: 4),
+                  Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 300), height: 4, decoration: BoxDecoration(color: _passwordStrength >= 4 ? _getStrengthColor() : AppTheme.surfaceGlass, borderRadius: BorderRadius.circular(2), boxShadow: _passwordStrength >= 4 ? [BoxShadow(color: _getStrengthColor().withValues(alpha: 0.5), blurRadius: 4)] : []))),
                 ],
               ),
               const SizedBox(height: 12),

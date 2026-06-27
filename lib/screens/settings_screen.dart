@@ -6,6 +6,7 @@ import '../theme_notifier.dart';
 import '../theme.dart';
 import 'info_screen.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,8 +16,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final dio = Dio();
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  final Dio dio = ApiClient().dio;
+  final String apiUrl = ApiClient.apiUrl;
   bool _isProcessing = false;
 
   Future<void> _signOut() async {

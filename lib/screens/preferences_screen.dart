@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../constants.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 
 class PreferencesScreen extends StatefulWidget {
   const PreferencesScreen({super.key});
@@ -13,8 +14,8 @@ class PreferencesScreen extends StatefulWidget {
 }
 
 class _PreferencesScreenState extends State<PreferencesScreen> {
-  final dio = Dio();
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  final Dio dio = ApiClient().dio;
+  final String apiUrl = ApiClient.apiUrl;
 
   bool _isLoading = true;
   bool _isSaving = false;

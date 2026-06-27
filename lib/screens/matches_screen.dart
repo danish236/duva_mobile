@@ -6,6 +6,7 @@ import 'notifications_screen.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 import '../constants.dart';
 
 class MatchesScreen extends StatefulWidget {
@@ -20,8 +21,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
   List<dynamic> _matches = [];
   bool _hasUnreadNotifications = false; // Controls the red dot on the bell
   
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
-  final dio = Dio();
+  final String apiUrl = ApiClient.apiUrl;
+  final Dio dio = ApiClient().dio;
 
   @override
   void initState() {
@@ -235,7 +236,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
             itemCount: _matches.length,
             itemBuilder: (context, index) {
               final match = _matches[index];
-              final String imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : 'https://via.placeholder.com/150';
+              final String? imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : null;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -247,7 +248,12 @@ class _MatchesScreenState extends State<MatchesScreen> {
                         shape: BoxShape.circle,
                         border: Border.all(color: AppTheme.primaryRose, width: 2), 
                       ),
-                      child: CircleAvatar(radius: 35, backgroundImage: NetworkImage(imageUrl)),
+                      child: CircleAvatar(
+                        radius: 35,
+                        backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+                        backgroundColor: AppTheme.surfaceGlass,
+                        child: imageUrl == null ? const Icon(Icons.person, color: AppTheme.textSecondary, size: 30) : null,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(match['firstName'] ?? match['first_name'] ?? 'Match', style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
@@ -265,10 +271,15 @@ class _MatchesScreenState extends State<MatchesScreen> {
           child: Text('Messages', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
         ),
         ..._matches.map((match) {
-          final String imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : 'https://via.placeholder.com/150';
+          final String? imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : null;
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            leading: CircleAvatar(radius: 28, backgroundImage: NetworkImage(imageUrl)),
+            leading: CircleAvatar(
+              radius: 28,
+              backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+              backgroundColor: AppTheme.surfaceGlass,
+              child: imageUrl == null ? const Icon(Icons.person, color: AppTheme.textSecondary) : null,
+            ),
             title: Text(match['firstName'] ?? match['first_name'] ?? 'Match', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
             subtitle: Text('Matched recently! Say hi.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
             onTap: () {
@@ -278,7 +289,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   builder: (context) => ChatScreen(
                     matchId: match['id'],
                     matchName: match['firstName'] ?? match['first_name'] ?? 'Match',
-                    matchImage: imageUrl,
+                    matchImage: imageUrl ?? '',
                   ),
                 ),
               );

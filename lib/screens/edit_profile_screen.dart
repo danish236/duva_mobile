@@ -275,25 +275,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (finalImageUrls.isEmpty) throw Exception("No valid images to save.");
 
-      // 3. UPDATE SUPABASE DATABASE
-      await Supabase.instance.client.from('profiles').update({
-        'bio': bioText,
-        'work': cleanText(_workController.text),
-        'education': _selectedEducation,
-        'expectations': _selectedExpectation,
-        'location': cleanText(_locationController.text) ?? 'Unknown Location',
-        'current_date_bid': cleanText(_dateBidController.text),
-        'gender': _selectedGender,
-        'images': finalImageUrls, 
-        'height': _selectedHeight,
-        'weight': cleanText(_weightController.text),
-        'smoking': _selectedSmoking,
-        'drinking': _selectedDrinking,
-        'workout': _selectedWorkout,
-        'pets': _selectedPets,
-        'zodiac': _selectedZodiac,
-        'kids': _selectedKids,
-      }).eq('id', userId);
+      // 3. UPDATE PROFILE VIA BACKEND GATEKEEPER
+      final dio = Dio();
+      final apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+      final profile = widget.currentProfile;
+      await dio.post(
+        '$apiUrl/profile',
+        data: {
+          'firstName': profile.firstName,
+          'lastName': profile.lastName,
+          'bio': bioText,
+          'dob': profile.dob.toIso8601String().split('T')[0],
+          'gender': _selectedGender,
+          'lookingFor': null,
+          'images': finalImageUrls,
+          'expectations': _selectedExpectation,
+          'work': cleanText(_workController.text),
+          'education': _selectedEducation,
+          'location': cleanText(_locationController.text),
+          'currentDateBid': cleanText(_dateBidController.text),
+          'height': _selectedHeight,
+          'weight': cleanText(_weightController.text),
+          'smoking': _selectedSmoking,
+          'drinking': _selectedDrinking,
+          'workout': _selectedWorkout,
+          'pets': _selectedPets,
+          'zodiac': _selectedZodiac,
+          'kids': _selectedKids,
+        },
+        options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
+      );
 
       // 4. UPDATE INTERESTS
       final uniqueInterests = _selectedInterestIds.toSet().toList();

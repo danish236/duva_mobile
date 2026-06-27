@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../services/cache_service.dart';
+import '../services/api_service.dart';
 import '../constants.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -17,8 +18,8 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _notifications = [];
-  final dio = Dio();
-  final String apiUrl = 'https://backend.duvamobile.workers.dev';
+  final Dio dio = ApiClient().dio;
+  final String apiUrl = ApiClient.apiUrl;
 
   @override
   void initState() {

@@ -40,8 +40,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         email: _emailController.text.trim(), 
         password: _passwordController.text.trim()
       );
+    } on AuthException catch (e) {
+      String msg;
+      switch (e.message) {
+        case 'Invalid login credentials':
+          msg = 'Invalid email or password';
+          break;
+        default:
+          msg = e.message;
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
