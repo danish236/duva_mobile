@@ -128,10 +128,14 @@ app.post('/upload', async (c) => {
       image: [...uint8Array]
     });
 
-    const answer = (aiResponse.response as string).toUpperCase().trim();
+    const rawResponse = aiResponse.response as string;
+    console.log("NSFW AI RAW RESPONSE:", rawResponse);
 
-    if (answer === 'YES') {
-        return c.json({ error: 'NSFW Content Detected. Image rejected by Safety Engine.' }, 403);
+    const answer = rawResponse.toUpperCase().trim();
+
+    if (answer === 'YES' || answer.startsWith('YES')) {
+        console.log("NSFW FLAGGED - AI said:", rawResponse);
+        return c.json({ error: 'NSFW Content Detected. Image rejected by Safety Engine.', ai_raw: rawResponse }, 403);
     }
 
     const rand = new Uint8Array(8);
@@ -899,10 +903,13 @@ app.post('/moderate-text', async (c) => {
       ]
     });
 
-    const responseText = (aiResponse.response as string).toUpperCase();
+    const rawResponse = aiResponse.response as string;
+    console.log("MODERATE-TEXT AI RAW RESPONSE:", rawResponse);
+
+    const responseText = rawResponse.toUpperCase();
     const isClean = !responseText.includes('DIRTY');
 
-    return c.json({ isClean });
+    return c.json({ isClean, ai_raw: rawResponse });
   } catch (e) {
     console.error("Moderation Error:", e);
     return c.json({ isClean: true });
@@ -947,7 +954,10 @@ app.post('/generate-bio', async (c) => {
       ]
     });
 
-    let rawText = (aiResponse.response as string).trim();
+    const rawAiResponse = aiResponse.response as string;
+    console.log("BIO-GEN AI RAW RESPONSE:", rawAiResponse);
+
+    let rawText = rawAiResponse.trim();
     if (rawText.startsWith('```json')) rawText = rawText.replace(/```json/g, '');
     if (rawText.startsWith('```')) rawText = rawText.replace(/```/g, '');
     rawText = rawText.trim();
@@ -956,12 +966,9 @@ app.post('/generate-bio', async (c) => {
     try {
       bios = JSON.parse(rawText);
       if (!Array.isArray(bios) || bios.length === 0) throw new Error('Invalid format');
-    } catch {
-      bios = [
-        "I'm all about good vibes and great conversations. Let's see where this goes!",
-        "Exploring life one adventure at a time. Coffee and deep talks are my love language.",
-        "Just a regular person looking for something real. If you love dogs and sunsets, we'll get along!"
-      ];
+    } catch (parseErr) {
+      console.error("BIO-GEN PARSE ERROR:", parseErr, "RAW:", rawAiResponse);
+      throw new Error('AI returned invalid format');
     }
 
     await supabase
@@ -972,12 +979,7 @@ app.post('/generate-bio', async (c) => {
     return c.json({ bios, cooldown_days: 7 });
   } catch (e) {
     console.error("Bio Generation Error:", e);
-    const fallbackBios = [
-      "I'm all about good vibes and great conversations. Let's see where this goes!",
-      "Exploring life one adventure at a time. Coffee and deep talks are my love language.",
-      "Just a regular person looking for something real. If you love dogs and sunsets, we'll get along!"
-    ];
-    return c.json({ bios: fallbackBios, cooldown_days: 7 });
+    return c.json({ error: 'Failed to generate bio', debug: String(e) }, 500);
   }
 });
 

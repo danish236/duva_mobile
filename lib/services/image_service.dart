@@ -60,7 +60,10 @@ class ImageService {
         return response.data['url'] as String;
       }
 
-      throw Exception(Messages.cloudflareUploadFailed);
+      final aiRaw = response.data?['ai_raw'];
+      final errMsg = response.data?['error'] ?? Messages.cloudflareUploadFailed;
+      if (aiRaw != null) throw Exception('$errMsg (AI: $aiRaw)');
+      throw Exception(errMsg);
     } finally {
       try { File(compressedImage.path).deleteSync(); } catch (_) {}
     }

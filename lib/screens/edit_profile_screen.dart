@@ -435,9 +435,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (data != null && data['cooldown_days'] != null && mounted) {
         setState(() => _bioCooldownDays = data['cooldown_days'] as int);
       } else if (mounted) {
+        final debugInfo = data?['debug'];
+        final errMsg = data?['error'] ?? Messages.unableToGenerateBio;
+        final displayMsg = debugInfo != null ? '$errMsg\n($debugInfo)' : errMsg;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(data?['error'] ?? Messages.unableToGenerateBio),
+            content: Text(displayMsg),
             backgroundColor: AppTheme.primaryRose,
           ),
         );
