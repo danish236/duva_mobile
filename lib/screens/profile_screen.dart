@@ -120,6 +120,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isValid(String? val) => val != null && val.trim().isNotEmpty && val != 'null';
 
+  double _profileCompletion(ProfileData p) {
+    int filled = 0;
+    int total = 0;
+    if (p.images.isNotEmpty) filled++; total++;
+    if (_isValid(p.bio)) filled++; total++;
+    if (_isValid(p.work)) filled++; total++;
+    if (_isValid(p.education)) filled++; total++;
+    if (_isValid(p.expectations)) filled++; total++;
+    if (p.interests.isNotEmpty) filled++; total++;
+    if (_isValid(p.height)) filled++; total++;
+    if (_isValid(p.weight)) filled++; total++;
+    if (_isValid(p.smoking)) filled++; total++;
+    if (_isValid(p.drinking)) filled++; total++;
+    if (_isValid(p.workout)) filled++; total++;
+    if (_isValid(p.pets)) filled++; total++;
+    if (_isValid(p.zodiac)) filled++; total++;
+    if (_isValid(p.kids)) filled++; total++;
+    if (_isValid(p.currentDateBid)) filled++; total++;
+    return total == 0 ? 0.0 : filled / total;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -207,42 +228,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(icon: const Icon(Icons.settings, color: Colors.white), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),
         ],
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0]),
+      body: RefreshIndicator(
+        color: AppTheme.electricCyan,
+        backgroundColor: const Color(0xFF1A1A1A),
+        onRefresh: () async {
+          CacheService().remove('profile_data');
+          CacheService().remove('is_premium');
+          setState(() => _isLoading = true);
+          await _fetchMyProfile();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0]),
 
-            _buildPunchyInfoCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
-                      if (profile.isPremium) ...[
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [BoxShadow(color: AppTheme.electricCyan.withValues(alpha: 0.3), blurRadius: 8)],
+              _buildPunchyInfoCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${profile.firstName}, ${profile.age}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
+                        if (profile.isPremium) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: AppTheme.electricCyan.withValues(alpha: 0.3), blurRadius: 8)],
+                            ),
+                            child: const Text('BLACK', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                           ),
-                          child: const Text('BLACK', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                        ),
-                      ]
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(children: [const Icon(Icons.location_on, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.location, style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))]),
-                  if (_isValid(profile.work)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.work, size: 18, color: AppTheme.primaryRose), const SizedBox(width: 6), Text(profile.work!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
-                  if (_isValid(profile.education)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.school, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.education!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
-                ],
+                        ]
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(children: [const Icon(Icons.location_on, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.location, style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))]),
+                    if (_isValid(profile.work)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.work, size: 18, color: AppTheme.primaryRose), const SizedBox(width: 6), Text(profile.work!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
+                    if (_isValid(profile.education)) Padding(padding: const EdgeInsets.only(top: 8.0), child: Row(children: [const Icon(Icons.school, size: 18, color: AppTheme.electricCyan), const SizedBox(width: 6), Text(profile.education!, style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600))])),
+                  ],
+                ),
               ),
-            ),
+
+              // Profile completion bar
+              _buildCompletionBar(profile),
 
             if (_isValid(profile.currentDateBid))
               Container(
@@ -324,9 +357,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
 
             if (profile.images.length > 2) _buildFullWidthImage(profile.images[2]),
-            const SizedBox(height: 120), // Bottom padding for floating nav bar
+            const SizedBox(height: 120),
           ],
         ),
+      ),
+      ),
+    );
+  }
+
+  Widget _buildCompletionBar(ProfileData p) {
+    final double completion = _profileCompletion(p);
+    final int pct = (completion * 100).round();
+    final bool isComplete = completion >= 1.0;
+    final String label = isComplete ? 'Profile Complete!' : '$pct% Complete';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceGlass,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: isComplete ? AppTheme.electricCyan.withValues(alpha: 0.3) : Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(isComplete ? Icons.check_circle : Icons.person_outline, size: 18, color: isComplete ? AppTheme.electricCyan : AppTheme.textSecondary),
+                  const SizedBox(width: 8),
+                  Text(label, style: TextStyle(color: isComplete ? AppTheme.electricCyan : AppTheme.textSecondary, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.0)),
+                ],
+              ),
+              if (!isComplete)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => EditProfileScreen(currentProfile: p)));
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(color: AppTheme.primaryRose, borderRadius: BorderRadius.circular(12)),
+                    child: const Text('FILL', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: completion,
+              backgroundColor: AppTheme.voidBackground,
+              valueColor: AlwaysStoppedAnimation<Color>(isComplete ? AppTheme.electricCyan : AppTheme.primaryRose),
+              minHeight: 6,
+            ),
+          ),
+        ],
       ),
     );
   }

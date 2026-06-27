@@ -80,11 +80,21 @@ Future<void> _fetchNotifications() async {
         ? _buildShimmer()
         : _notifications.isEmpty 
           ? _buildEmptyState()
-          : ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              itemCount: _notifications.length,
-              separatorBuilder: (context, index) => Divider(color: Colors.white.withValues(alpha: 0.05), height: 1),
-              itemBuilder: (context, index) => _buildNotificationTile(_notifications[index]),
+          : RefreshIndicator(
+              color: AppTheme.electricCyan,
+              backgroundColor: const Color(0xFF1A1A1A),
+              onRefresh: () async {
+                CacheService().remove('notifications');
+                setState(() => _isLoading = true);
+                await _fetchNotifications();
+              },
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                itemCount: _notifications.length,
+                separatorBuilder: (context, index) => Divider(color: Colors.white.withValues(alpha: 0.05), height: 1),
+                itemBuilder: (context, index) => _buildNotificationTile(_notifications[index]),
+              ),
             ),
     );
   }

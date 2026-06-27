@@ -76,12 +76,18 @@ class _MatchesScreenState extends State<MatchesScreen> {
     }
   }
 
+  Future<void> _onRefresh() async {
+    CacheService().remove('unread_notifications');
+    await _fetchMatches();
+    await _checkUnreadNotifications();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppTheme.voidBackground, // FIX: Replaced deprecated colorScheme.background
+      backgroundColor: AppTheme.voidBackground,
       appBar: AppBar(
         title: Row(
           children: [
@@ -188,7 +194,12 @@ class _MatchesScreenState extends State<MatchesScreen> {
         // ------------------------------------------
         : _matches.isEmpty 
           ? _buildEmptyState(colorScheme)
-          : _buildInbox(colorScheme),
+            : RefreshIndicator(
+                color: AppTheme.electricCyan,
+                backgroundColor: const Color(0xFF1A1A1A),
+                onRefresh: _onRefresh,
+                child: _buildInbox(colorScheme),
+              ),
     );
   }
 
@@ -208,8 +219,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
   }
 
   Widget _buildInbox(ColorScheme colorScheme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
@@ -219,6 +230,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           height: 110,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             itemCount: _matches.length,
             itemBuilder: (context, index) {
@@ -252,34 +264,27 @@ class _MatchesScreenState extends State<MatchesScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
           child: Text('Messages', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
         ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _matches.length,
-            itemBuilder: (context, index) {
-              final match = _matches[index];
-              final String imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : 'https://via.placeholder.com/150';
-
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                leading: CircleAvatar(radius: 28, backgroundImage: NetworkImage(imageUrl)),
-                title: Text(match['firstName'] ?? match['first_name'] ?? 'Match', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
-                subtitle: Text('Matched recently! Say hi.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                        matchId: match['id'],
-                        matchName: match['firstName'] ?? match['first_name'] ?? 'Match',
-                        matchImage: imageUrl,
-                      ),
-                    ),
-                  );
-                },
+        ..._matches.map((match) {
+          final String imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : 'https://via.placeholder.com/150';
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: CircleAvatar(radius: 28, backgroundImage: NetworkImage(imageUrl)),
+            title: Text(match['firstName'] ?? match['first_name'] ?? 'Match', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
+            subtitle: Text('Matched recently! Say hi.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    matchId: match['id'],
+                    matchName: match['firstName'] ?? match['first_name'] ?? 'Match',
+                    matchImage: imageUrl,
+                  ),
+                ),
               );
             },
-          ),
-        ),
+          );
+        }),
       ],
     );
   }
