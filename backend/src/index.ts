@@ -272,6 +272,62 @@ app.post('/swipe', async (c) => {
   }
 });
 
+// GET: Generate AI Icebreakers for an empty chat
+app.get('/matches/:match_id/icebreakers', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const matchId = c.req.param('match_id');
+
+    // 1. Fetch Interests for both users
+    const { data: myInterests } = await supabase.from('profile_interests').select('master_interests(name)').eq('profile_id', user.id);
+    const { data: theirInterests } = await supabase.from('profile_interests').select('master_interests(name)').eq('profile_id', matchId);
+
+    const myTags = myInterests?.map((i: any) => i.master_interests?.name).join(', ') || 'nothing specific';
+    const theirTags = theirInterests?.map((i: any) => i.master_interests?.name).join(', ') || 'nothing specific';
+
+    // 2. Call Cloudflare Text AI
+    const ai = c.env.AI;
+    const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a witty dating assistant. Your job is to write 3 short, clever, and engaging opening messages for a dating app. Base them on the shared or unique interests of the users. Return EXACTLY a JSON array of 3 strings. Do not include markdown, greetings, or explanations. Example: [\"text 1\", \"text 2\", \"text 3\"]" 
+        },
+        { 
+          role: "user", 
+          content: `My interests: ${myTags}. Their interests: ${theirTags}. Generate 3 icebreakers.` 
+        }
+      ]
+    });
+
+    // 3. Clean and parse the LLM's response
+    let rawText = (aiResponse.response as string).trim();
+    // Sometimes LLMs wrap JSON in markdown blocks, we must strip it safely
+    if (rawText.startsWith('```json')) rawText = rawText.replace(/```json/g, '');
+    if (rawText.startsWith('```')) rawText = rawText.replace(/```/g, '');
+    rawText = rawText.trim();
+
+    try {
+      const icebreakers = JSON.parse(rawText);
+      return c.json(icebreakers);
+    } catch (parseError) {
+      // Fallback if the AI hallucinates bad JSON
+      return c.json([
+        "I saw your profile and had to say hi!",
+        "What's the best thing that happened to you this week?",
+        "If you had to eat one meal for the rest of your life, what would it be?"
+      ]);
+    }
+
+  } catch (e) {
+    console.error("Icebreaker Error:", e);
+    return c.json({ error: 'Failed to generate icebreakers' }, 500);
+  }
+});
+
 // --- 5. STATELESS CHAT POLLING (Saves WebSocket Limits) ---
 
 // GET: Fetch conversation history

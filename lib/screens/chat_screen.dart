@@ -7,7 +7,6 @@ import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
 import '../constants.dart';
 
-
 class ChatScreen extends StatefulWidget {
   final String matchId;
   final String matchName;
@@ -26,11 +25,13 @@ class _ChatScreenState extends State<ChatScreen> {
   final String apiUrl = 'https://backend.duvamobile.workers.dev';
   bool _isPremium = false;
   
+  // AI Icebreaker States
+  List<String> _icebreakers = [];
+  bool _isLoadingIcebreakers = false;
+  
   List<dynamic> _messages = [];
   Timer? _pollingTimer;
   String? _myUserId;
-  
-  // ADDED: Loading state for the shimmer
   bool _isLoading = true; 
 
   @override
@@ -42,8 +43,29 @@ class _ChatScreenState extends State<ChatScreen> {
     _pollingTimer = Timer.periodic(AppConstants.chatPollingInterval, (timer) => _fetchMessages(isPolling: true));
   }
 
+  // Moved outside of initState
+  Future<void> _fetchIcebreakers() async {
+    if (_icebreakers.isNotEmpty || _messages.isNotEmpty) return;
+
+    setState(() => _isLoadingIcebreakers = true);
+    try {
+      final options = await _getSecureOptions();
+      final response = await dio.get('$apiUrl/matches/${widget.matchId}/icebreakers', options: options);
+      
+      if (mounted) {
+        setState(() {
+          _icebreakers = List<String>.from(response.data);
+        });
+      }
+    } catch (e) {
+      debugPrint("Icebreakers failed: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingIcebreakers = false);
+    }
+  }
+
   Future<void> _fetchPremiumStatus() async {
-    if (_myUserId == null) return; // ✅ Failsafe against null exceptions
+    if (_myUserId == null) return; 
     try {
       final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', _myUserId!).single();
       if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
@@ -72,13 +94,19 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _messages = List.from(response.data.reversed);
-          _isLoading = false; // Turn off shimmer when data arrives
+          // Trigger Icebreakers if the chat is completely empty
+          if (_messages.isEmpty && _icebreakers.isEmpty && !_isLoadingIcebreakers) {
+            _fetchIcebreakers();
+          }
+          _isLoading = false; 
         });
-        if (!isPolling && _messages.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        if (!isPolling && _messages.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        }
       }
     } catch (e) { 
       debugPrint("Polling error: $e"); 
-      if (mounted) setState(() => _isLoading = false); // Failsafe
+      if (mounted) setState(() => _isLoading = false); 
     }
   }
 
@@ -132,20 +160,18 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
       body: _isLoading
-          // --- THE 2026 CHAT SKELETON LOADER ---
           ? PremiumShimmer(
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: 6,
                 itemBuilder: (context, index) {
-                  // Alternate left/right alignment for ghost messages
                   final isMe = index % 2 == 0;
                   return Align(
                     alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 16),
                       child: ShimmerBox(
-                        width: 150 + (index * 20.0 % 50), // Randomize bubble widths slightly
+                        width: 150 + (index * 20.0 % 50), 
                         height: 50,
                         borderRadius: 20,
                       ),
@@ -154,55 +180,119 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             )
-          // --- ACTUAL CHAT UI ---
           : Column(
               children: [
                 Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      final isMe = msg['sender_id'] == _myUserId;
-                      return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 280), 
-                          margin: const EdgeInsets.only(bottom: 8), 
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isMe ? AppTheme.primaryRose : AppTheme.surfaceGlass,
-                            border: isMe ? null : Border.all(color: Colors.white12),
-                            borderRadius: BorderRadius.circular(20).copyWith(
-                              bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
-                              bottomLeft: !isMe ? const Radius.circular(4) : const Radius.circular(20),
-                            ),
-                            boxShadow: isMe ? [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
-                          ),
-                          child: Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.end,
-                            alignment: WrapAlignment.end,
-                            children: [
-                              Text(msg['content'], style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-                              if (isMe && _isPremium) ...[
-                                const SizedBox(width: 8),
-                                Icon(
-                                  Icons.done_all, 
-                                  size: 16, 
-                                  color: msg['is_read'] == true ? AppTheme.electricCyan : Colors.white38
+                  child: _messages.isEmpty
+                      ? _buildEmptyStateWithIcebreakers()
+                      : ListView.builder(
+                          controller: _scrollController,
+                          reverse: true, // Messages array is reversed, ListView displays bottom-up
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _messages.length,
+                          itemBuilder: (context, index) {
+                            final msg = _messages[index];
+                            final isMe = msg['sender_id'] == _myUserId;
+                            return Align(
+                              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 280), 
+                                margin: const EdgeInsets.only(bottom: 8), 
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: isMe ? AppTheme.primaryRose : AppTheme.surfaceGlass,
+                                  border: isMe ? null : Border.all(color: Colors.white12),
+                                  borderRadius: BorderRadius.circular(20).copyWith(
+                                    bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
+                                    bottomLeft: !isMe ? const Radius.circular(4) : const Radius.circular(20),
+                                  ),
+                                  boxShadow: isMe ? [BoxShadow(color: AppTheme.primaryRose.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
                                 ),
-                              ]
-                            ],
-                          ),
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.end,
+                                  alignment: WrapAlignment.end,
+                                  children: [
+                                    Text(msg['content'], style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                                    if (isMe && _isPremium) ...[
+                                      const SizedBox(width: 8),
+                                      Icon(
+                                        Icons.done_all, 
+                                        size: 16, 
+                                        color: msg['is_read'] == true ? AppTheme.electricCyan : Colors.white38
+                                      ),
+                                    ]
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
                 _buildMessageInput(),
               ],
             ),
+    );
+  }
+
+  // --- THE NEW AI UI ---
+  Widget _buildEmptyStateWithIcebreakers() {
+    return Center(
+      child: SingleChildScrollView( // Prevents overflow if the keyboard pops up
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.chat_bubble_outline, size: 64, color: Colors.white24),
+              const SizedBox(height: 16),
+              const Text('Start the Alignment', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              const Text('No messages yet. Send a message to break the ice.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
+              
+              const SizedBox(height: 40),
+              
+              if (_isLoadingIcebreakers)
+                const Column(
+                  children: [
+                    SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2)),
+                    SizedBox(height: 16),
+                    Text('✨ AI generating icebreakers...', style: TextStyle(color: AppTheme.electricCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                )
+              else if (_icebreakers.isNotEmpty) ...[
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.auto_awesome, color: AppTheme.electricCyan, size: 16),
+                    SizedBox(width: 8),
+                    Text('AI SUGGESTIONS', style: TextStyle(color: AppTheme.electricCyan, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ..._icebreakers.map((text) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _messageController.text = text; // Instantly paste it into the keyboard box!
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.electricCyan.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.electricCyan.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                    ),
+                  ),
+                )),
+              ]
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -225,7 +315,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
                   filled: true,
-                  fillColor: AppTheme.voidBackground, // Deep contrast for input box
+                  fillColor: AppTheme.voidBackground, 
                   contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 ),
               ),
@@ -239,7 +329,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: CircleAvatar(
                 backgroundColor: AppTheme.electricCyan,
                 radius: 26,
-                child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 20), onPressed: _sendMessage),
+                child: IconButton(icon: const Icon(Icons.send, color: Colors.black, size: 20), onPressed: _sendMessage),
               ),
             ),
           ],
