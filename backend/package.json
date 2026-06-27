@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
-    "hono": "^4.12.26"
+    "hono": "^4.12.26",
+    "naughty-words": "^1.2.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260621.1",

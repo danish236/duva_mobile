@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createClient } from '@supabase/supabase-js';
+import { containsProfanity } from './profanity';
 
 type Bindings = {
   duva_images: R2Bucket;
@@ -755,10 +756,9 @@ app.post('/profile', async (c) => {
     const { firstName, lastName, bio, dob, gender_id, looking_for_gender_id, images, expectations_id, work, education_id, location, currentDateBid, height, weight, smoking_id, drinking_id, workout_id, pets_id, zodiac_id, kids_id } = await c.req.json();
 
     // 1. Profanity filter on all text fields
-    const spamRegex = /(fuck|shit|bitch|cunt|nigger|onlyfans|only fans|t\.me|telegram|insta|ig:|snapchat|sc:|\@)/i;
     const textFields = [bio, firstName, work, location, currentDateBid].filter(Boolean);
     for (const field of textFields) {
-      if (spamRegex.test(String(field))) {
+      if (containsProfanity(String(field))) {
         return c.json({ error: 'Profile text contains prohibited language or social handles.' }, 400);
       }
     }
@@ -876,7 +876,7 @@ app.post('/profile', async (c) => {
   }
 });
 
-// --- 14. TRUST & SAFETY: TEXT MODERATION ---
+// --- 14. TRUST & SAFETY: TEXT MODERATION (regex-based, no AI) ---
 app.post('/moderate-text', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -889,27 +889,9 @@ app.post('/moderate-text', async (c) => {
       return c.json({ isClean: true });
     }
 
-    const ai = c.env.AI;
-    const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages: [
-        {
-          role: "system",
-          content: "You are a highly strict Trust & Safety automated filter for a premium dating app. Read the user input. If it contains profanity, slurs, explicit sexual requests, severe toxicity, or insults, reply STRICTLY with 'DIRTY'. If it is completely clean and safe, reply STRICTLY with 'CLEAN'. Do not explain your answer."
-        },
-        {
-          role: "user",
-          content: text
-        }
-      ]
-    });
+    const isClean = !containsProfanity(text);
 
-    const rawResponse = aiResponse.response as string;
-    console.log("MODERATE-TEXT AI RAW RESPONSE:", rawResponse);
-
-    const responseText = rawResponse.toUpperCase();
-    const isClean = !responseText.includes('DIRTY');
-
-    return c.json({ isClean, ai_raw: rawResponse });
+    return c.json({ isClean, method: 'wordlist' });
   } catch (e) {
     console.error("Moderation Error:", e);
     return c.json({ isClean: true });
