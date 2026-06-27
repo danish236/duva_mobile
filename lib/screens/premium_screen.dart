@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../messages.dart';
 import '../constants.dart'; // Make sure you created this file!
 
 class PremiumScreen extends StatefulWidget {
@@ -63,13 +64,13 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'DUVA BLACK',
+                    Messages.premiumTitle,
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 3),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Elevate your alignment.',
+                    Messages.premiumSubtitle,
                     style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16, letterSpacing: 1.5),
                   ),
                   
@@ -225,7 +226,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                 const SizedBox(height: 12),
                 Text('${AppConstants.currencySymbol}${price.toInt()}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
-                Text('billed total', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                Text(Messages.billedTotal, style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
               ],
             ),
             if (badge != null)
@@ -251,7 +252,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
     
     // TODO: Implement Razorpay / Stripe / RevenueCat here
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Initializing gateway for ${AppConstants.currencySymbol}${priceToCharge.toInt()}...'))
+      SnackBar(content: Text(Messages.initializingGateway.replaceFirst('%s', AppConstants.currencySymbol).replaceFirst('%s', priceToCharge.toInt().toString())))
     );
   }
 }

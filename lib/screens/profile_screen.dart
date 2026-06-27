@@ -7,6 +7,7 @@ import 'edit_profile_screen.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../services/cache_service.dart';
+import '../messages.dart';
 import '../constants.dart';
 
 class ProfileData {
@@ -103,7 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchMyProfile() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('User is not logged in.');
+      if (userId == null) throw Exception(Messages.profileNotLoggedIn);
       final data = await CacheService().getOrFetch<Map<String, dynamic>>(
         'profile_data',
         () async {
@@ -114,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       setState(() { _myProfile = ProfileData.fromJson(data); _isLoading = false; });
     } catch (e) {
-      setState(() { _errorMessage = "Could not load profile. Have you completed onboarding?"; _isLoading = false; });
+      setState(() { _errorMessage = Messages.couldNotLoadProfile; _isLoading = false; });
     }
   }
 
@@ -154,7 +155,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
               ),
               const SizedBox(width: 12),
-              const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+              const Text(Messages.profileTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
             ],
           ),
         ),
@@ -209,7 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
             ),
             const SizedBox(width: 12),
-            const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+            const Text(Messages.profileTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
           ],
         ),
         actions: [
@@ -261,7 +262,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [BoxShadow(color: AppTheme.electricCyan.withValues(alpha: 0.3), blurRadius: 8)],
                             ),
-                            child: const Text('BLACK', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                            child: const Text(Messages.premiumBadge, style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                           ),
                         ]
                       ],
@@ -289,7 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(children: [Icon(Icons.local_fire_department, color: Colors.white, size: 22), SizedBox(width: 8), Text('MY ACTIVE DATE BID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 13))]),
+                    const Row(children: [Icon(Icons.local_fire_department, color: Colors.white, size: 22), SizedBox(width: 8), Text(Messages.myActiveDateBid, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 13))]),
                     const SizedBox(height: 12),
                     Text(profile.currentDateBid!, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.4)),
                   ],
@@ -305,7 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('LIFESTYLE', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white.withValues(alpha: 0.5))),
+                    Text(Messages.profileLifestyle, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white.withValues(alpha: 0.5))),
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 10.0, runSpacing: 10.0, 
@@ -328,9 +329,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            if (_isValid(profile.bio)) _buildPunchyPromptCard('ABOUT ME', profile.bio!),
+            if (_isValid(profile.bio)) _buildPunchyPromptCard(Messages.aboutMe, profile.bio!),
             if (profile.images.length > 1) _buildFullWidthImage(profile.images[1]),
-            if (_isValid(profile.expectations)) _buildPunchyPromptCard('LOOKING FOR', profile.expectations!),
+            if (_isValid(profile.expectations)) _buildPunchyPromptCard(Messages.lookingFor, profile.expectations!),
             
             if (profile.interests.isNotEmpty)
               Container(
@@ -340,7 +341,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('INTERESTS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white.withValues(alpha: 0.5))),
+                    Text(Messages.interests, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white.withValues(alpha: 0.5))),
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 10.0, runSpacing: 10.0, 
@@ -400,7 +401,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(color: AppTheme.primaryRose, borderRadius: BorderRadius.circular(12)),
-                    child: const Text('FILL', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    child: const Text(Messages.fillProfile, style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
                   ),
                 ),
             ],

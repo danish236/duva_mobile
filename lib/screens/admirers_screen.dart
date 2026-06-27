@@ -7,6 +7,7 @@ import '../widgets/premium_shimmer.dart';
 import '../widgets/profile_modal.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
+import '../messages.dart';
 import '../constants.dart';
 
 class AdmirersScreen extends StatefulWidget {
@@ -95,7 +96,7 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
             child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
           ),
           const SizedBox(width: 12),
-          const Text('ADMIRERS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+          const Text(Messages.admirersTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
         ],
       ),
       backgroundColor: AppTheme.surfaceGlass,
@@ -110,9 +111,9 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
         children: [
           Icon(Icons.favorite_border, size: 80, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
           const SizedBox(height: 24),
-          const Text('No Admirers Yet', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          const Text(Messages.admirersEmpty, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 12),
-          const Text('Keep swiping. Your alignments are out there.', style: TextStyle(color: AppTheme.textSecondary)),
+          const Text(Messages.admirersEmptyBody, style: TextStyle(color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -128,9 +129,9 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
             decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.1)),
             child: Column(
               children: [
-                const Text('Upgrade to Duva Black', style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                const Text(Messages.admirersPaywallTitle, style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
                 const SizedBox(height: 4),
-                Text('See who already liked you and match instantly.', style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.8), fontSize: 13)),
+                Text(Messages.admirersPaywallBody, style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.8), fontSize: 13)),
               ],
             ),
           ),
@@ -160,7 +161,7 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
                     if (!_isPremium) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Unlock Duva Black to reveal their photos & match!'),
+                          content: Text(Messages.unlockAdmirers),
                           behavior: SnackBarBehavior.floating,
                           backgroundColor: AppTheme.primaryRose,
                         )

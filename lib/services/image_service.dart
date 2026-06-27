@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide MultipartFile;
+import '../messages.dart';
 import 'api_service.dart';
 
 class ImageService {
@@ -37,7 +38,7 @@ class ImageService {
 
       final currentSession = Supabase.instance.client.auth.currentSession;
       if (currentSession == null) {
-        throw Exception('User is not authenticated. Cannot upload image.');
+        throw Exception(Messages.userNotAuthenticated);
       }
 
       final FormData formData = FormData.fromMap({
@@ -59,7 +60,7 @@ class ImageService {
         return response.data['url'] as String;
       }
 
-      throw Exception('Cloudflare Upload Failed');
+      throw Exception(Messages.cloudflareUploadFailed);
     } finally {
       try { File(compressedImage.path).deleteSync(); } catch (_) {}
     }

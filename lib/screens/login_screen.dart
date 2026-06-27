@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'register_screen.dart';
 import '../theme.dart';
+import '../messages.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -44,14 +45,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       String msg;
       switch (e.message) {
         case 'Invalid login credentials':
-          msg = 'Invalid email or password';
+          msg = Messages.invalidEmailOrPassword;
           break;
         default:
-          msg = e.message;
+          msg = Messages.authFailed;
       }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.somethingWentWrong)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -96,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               ),
               const SizedBox(height: 24),
               
-              const Text('ENTER THE VOID', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 4)),
+              const Text(Messages.loginTitle, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 4)),
               
               const SizedBox(height: 60), 
               

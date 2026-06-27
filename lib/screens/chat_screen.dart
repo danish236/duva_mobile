@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
+import '../messages.dart';
 import '../constants.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
@@ -182,7 +183,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final options = await _getSecureOptions();
       await dio.post('$apiUrl/messages/${widget.matchId}', data: {'content': text}, options: options);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to send message')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.failedToSendMessage)));
     } finally {
       // Resume polling
       _pollingTimer = Timer.periodic(AppConstants.chatPollingInterval, (timer) => _fetchMessages(isPolling: true));
@@ -301,9 +302,9 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               const Icon(Icons.chat_bubble_outline, size: 64, color: Colors.white24),
               const SizedBox(height: 16),
-              const Text('Start the Alignment', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+              const Text(Messages.startAlignment, style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
-              const Text('No messages yet. Send a message to break the ice.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
+              const Text(Messages.noMessagesYet, textAlign: TextAlign.center, style: TextStyle(color: Colors.white54)),
               
               const SizedBox(height: 40),
               
@@ -312,7 +313,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2)),
                     SizedBox(height: 16),
-                    Text('✨ AI generating icebreakers...', style: TextStyle(color: AppTheme.electricCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(Messages.aiGeneratingIcebreakers, style: TextStyle(color: AppTheme.electricCyan, fontSize: 12, fontWeight: FontWeight.bold)),
                   ],
                 )
               else if (_icebreakers.isNotEmpty) ...[
@@ -321,7 +322,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   children: [
                     Icon(Icons.auto_awesome, color: AppTheme.electricCyan, size: 16),
                     SizedBox(width: 8),
-                    Text('AI SUGGESTIONS', style: TextStyle(color: AppTheme.electricCyan, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                    Text(Messages.aiSuggestionsLabel, style: TextStyle(color: AppTheme.electricCyan, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -367,7 +368,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 controller: _messageController,
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                 decoration: InputDecoration(
-                  hintText: 'Type a message...',
+                  hintText: Messages.chatHint,
                   hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
                   filled: true,

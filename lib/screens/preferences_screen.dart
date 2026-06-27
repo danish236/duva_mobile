@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
+import '../messages.dart';
 import '../constants.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
@@ -85,7 +86,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
       );
       if (mounted) Navigator.pop(context, true); // Returns true to trigger refresh
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to save settings.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.failedToSavePrefs)));
       setState(() => _isSaving = false);
     }
   }
@@ -101,7 +102,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('DISCOVERY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+        title: const Text(Messages.preferencesTitle, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryRose))
@@ -216,7 +217,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                       ),
                       child: _isSaving 
                         ? const CircularProgressIndicator(color: Colors.white) 
-                        : const Text('APPLY FILTERS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                        : const Text(Messages.applyFilters, style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                     ),
                   ),
                 ),

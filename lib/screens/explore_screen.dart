@@ -14,6 +14,7 @@ import '../widgets/profile_modal.dart';
 import '../constants.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
+import '../messages.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -37,7 +38,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   
   Future<void> _triggerRewind() async {
     if (!_isPremium) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upgrade to Duva Black to rewind!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.rewindPaywall)));
       return;
     }
     if (_potentialMatches.isEmpty) return;
@@ -51,7 +52,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       }
     } on DioException catch (e) {
       if (mounted) {
-        final msg = e.response?.data['error'] ?? 'Cannot rewind this alignment.';
+        final msg = e.response?.data['error'] ?? Messages.cannotRewindMatch;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.primaryRose));
       }
     }
@@ -210,9 +211,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
             children: [
               const Icon(Icons.hourglass_empty, color: AppTheme.primaryRose, size: 48),
               const SizedBox(height: 16),
-              const Text('Daily Swipes Exhausted', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+              const Text(Messages.swipeLimitTitle, style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
-              const Text('You\'ve used all your free swipes for today. Upgrade to Duva Black for unlimited swipes.', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary)),
+              const Text(Messages.swipeLimitBody, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -222,12 +223,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     // Navigate to premium screen
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryRose, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                  child: const Text('GET DUVA BLACK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  child: const Text(Messages.getDuvaBlack, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                 ),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Come back tomorrow', style: TextStyle(color: AppTheme.textSecondary)),
+                child: const Text(Messages.comeBackTomorrow, style: TextStyle(color: AppTheme.textSecondary)),
               ),
             ],
           ),
@@ -272,7 +273,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       if (response.data['isMatch'] == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Row(children: [Icon(Icons.auto_awesome, color: Colors.white), SizedBox(width: 8), Text('ALIGNMENT SECURED', style: TextStyle(fontWeight: FontWeight.w900))]), 
+            content: Row(children: [Icon(Icons.auto_awesome, color: Colors.white), SizedBox(width: 8), Text(Messages.alignmentSecured, style: TextStyle(fontWeight: FontWeight.w900))]), 
             backgroundColor: AppTheme.primaryRose, behavior: SnackBarBehavior.floating
           )
         );
@@ -306,9 +307,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
             children: [
               const Icon(Icons.flare, color: AppTheme.electricCyan, size: 64), 
               const SizedBox(height: 16),
-              const Text('OUT OF SUPER ALIGNMENTS', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+              const Text(Messages.outOfSuperlikesTitle, style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
               const SizedBox(height: 12),
-              const Text('Stand out from the void. Super alignments are 3x more likely to result in a match.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+              const Text(Messages.outOfSuperlikesBody, textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
               const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
@@ -316,15 +317,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.electricCyan, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
                   onPressed: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing ₹300 payment for 10 Superlikes...')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.superlikePurchase)));
                   },
-                  child: const Text('GET 10 FOR ₹300', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  child: const Text(Messages.getSuperlikes, style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                 ),
               ),
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('MAYBE LATER', style: TextStyle(color: Colors.white54)),
+                child: const Text(Messages.later, style: TextStyle(color: Colors.white54)),
               )
             ],
           ),
@@ -347,7 +348,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ListTile(
                 leading: const Icon(Icons.block, color: Colors.white),
                 title: Text('Unmatch & Block ${profile.firstName}', style: const TextStyle(color: Colors.white)),
-                subtitle: const Text('They won\'t know you blocked them.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                subtitle: const Text(Messages.blockHint, style: TextStyle(color: Colors.white54, fontSize: 12)),
                 onTap: () {
                   Navigator.pop(context);
                   _executeModerationAction('block', profile.id, null);
@@ -356,7 +357,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ListTile(
                 leading: const Icon(Icons.flag, color: AppTheme.primaryRose),
                 title: Text('Report ${profile.firstName}', style: const TextStyle(color: AppTheme.primaryRose)),
-                subtitle: const Text('Report inappropriate behavior or fake profiles.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                subtitle: const Text(Messages.reportHint, style: TextStyle(color: Colors.white54, fontSize: 12)),
                 onTap: () {
                   Navigator.pop(context);
                   _fetchAndShowReportReasons(profile);
@@ -399,7 +400,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   Container(margin: const EdgeInsets.symmetric(vertical: 12), height: 4, width: 40, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
                   const Padding(
                     padding: EdgeInsets.all(16.0),
-                    child: Text('Why are you reporting this profile?', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    child: Text(Messages.reportTitle, style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
                   ...reasons.map((reason) => ListTile(
                     title: Text(reason['reason'], style: const TextStyle(color: Colors.white70)),
@@ -437,7 +438,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Profile removed securely.'),
+          content: Text(Messages.profileRemoved),
           backgroundColor: Colors.black87,
         ));
       }
@@ -511,9 +512,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
             children: [
               const Icon(Icons.radar, size: 80, color: AppTheme.textSecondary),
               const SizedBox(height: 24),
-              const Text('Scanning the Void', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+              const Text(Messages.emptyPoolTitle, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
               const SizedBox(height: 12),
-              const Text('No profiles match your advanced filters.', style: TextStyle(color: AppTheme.textSecondary)),
+              const Text(Messages.emptyPoolBody, style: TextStyle(color: AppTheme.textSecondary)),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -531,7 +532,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   _fetchPool();
                 },
                 icon: const Icon(Icons.refresh, size: 20),
-                label: const Text('FORCE RESCAN', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                label: const Text(Messages.forceRescan, style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
               ),
             ],
           ),
@@ -809,7 +810,7 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                     border: Border.all(color: AppTheme.electricCyan, width: 4),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text('ALIGN', style: TextStyle(color: AppTheme.electricCyan, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                  child: const Text(Messages.alignLabel, style: TextStyle(color: AppTheme.electricCyan, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
                 ),
               ),
             ),
@@ -828,7 +829,7 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                     border: Border.all(color: AppTheme.primaryRose, width: 4),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text('PASS', style: TextStyle(color: AppTheme.primaryRose, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                  child: const Text(Messages.passLabel, style: TextStyle(color: AppTheme.primaryRose, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
                 ),
               ),
             ),
@@ -849,7 +850,7 @@ class _CinematicProfileCardState extends State<CinematicProfileCard> {
                       borderRadius: BorderRadius.circular(12),
                       color: AppTheme.electricCyan.withValues(alpha: 0.2),
                     ),
-                    child: const Text('SUPER', style: TextStyle(color: AppTheme.electricCyan, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
+                    child: const Text(Messages.superLabel, style: TextStyle(color: AppTheme.electricCyan, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
                   ),
                 ),
               ),

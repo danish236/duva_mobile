@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import '../messages.dart';
 import '../constants.dart';
 
 class ProfileModal extends StatefulWidget {
@@ -119,7 +120,7 @@ class _ProfileModalState extends State<ProfileModal> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('TONIGHT\'S BID', style: TextStyle(color: AppTheme.primaryRose, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                                    const Text(Messages.tonightsBid, style: TextStyle(color: AppTheme.primaryRose, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                                     const SizedBox(height: 4),
                                     Text('"${p['current_date_bid']}"', style: const TextStyle(color: Colors.white, fontSize: 15, fontStyle: FontStyle.italic)),
                                   ],
@@ -131,7 +132,7 @@ class _ProfileModalState extends State<ProfileModal> {
                             const Text('ABOUT ME', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                             const SizedBox(height: 8),
                             Text(
-                              p['bio'] ?? 'No bio written yet.', 
+                              p['bio'] ?? Messages.noBioYet, 
                               style: TextStyle(color: Colors.white.withValues(alpha: 0.87), fontSize: 16, height: 1.4)
                             ),
 
@@ -173,7 +174,7 @@ class _ProfileModalState extends State<ProfileModal> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), side: const BorderSide(color: AppTheme.primaryRose, width: 2), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                             onPressed: () { Navigator.pop(context); widget.onPass!(); },
-                            child: const Text('PASS', style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                            child: const Text(Messages.passLabel, style: TextStyle(color: AppTheme.primaryRose, fontWeight: FontWeight.w900, letterSpacing: 2)),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -181,7 +182,7 @@ class _ProfileModalState extends State<ProfileModal> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.electricCyan, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                             onPressed: () { Navigator.pop(context); widget.onLike!(); },
-                            child: const Text('ALIGN', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                            child: const Text(Messages.alignLabel, style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 2)),
                           ),
                         ),
                       ],

@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
+import '../messages.dart';
 import '../constants.dart';
 
 class MatchesScreen extends StatefulWidget {
@@ -97,7 +98,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
               child: Image.asset('assets/logo_nobg.png', height: 28, color: Colors.white),
             ),
             const SizedBox(width: 12),
-            const Text('MATCHES', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+            const Text(Messages.matchesTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
           ],
         ),
         backgroundColor: colorScheme.surface,
@@ -211,9 +212,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
         children: [
           Icon(Icons.volunteer_activism, size: 80, color: colorScheme.onSurface.withValues(alpha: 0.2)),
           const SizedBox(height: 16),
-          Text('No Alignments Yet', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+          Text(Messages.matchesEmpty, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
           const SizedBox(height: 8),
-          Text('Keep exploring the pool to find your match.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
+          Text(Messages.matchesEmptyBody, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
         ],
       ),
     );
@@ -225,7 +226,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-          child: Text('New Alignments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryRose)), 
+          child: Text(Messages.newAlignments, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryRose)), 
         ),
         SizedBox(
           height: 110,
@@ -268,7 +269,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-          child: Text('Messages', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
+          child: Text(Messages.messagesSection, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
         ),
         ..._matches.map((match) {
           final String? imageUrl = (match['images'] != null && match['images'].isNotEmpty) ? match['images'][0] : null;
@@ -281,7 +282,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
               child: imageUrl == null ? const Icon(Icons.person, color: AppTheme.textSecondary) : null,
             ),
             title: Text(match['firstName'] ?? match['first_name'] ?? 'Match', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
-            subtitle: Text('Matched recently! Say hi.', style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
+            subtitle: Text(Messages.matchedRecently, style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.6))),
             onTap: () {
               Navigator.push(
                 context,

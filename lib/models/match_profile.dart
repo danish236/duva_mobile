@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../messages.dart';
 
 class MatchProfile {
   final String id;
@@ -36,9 +37,9 @@ class MatchProfile {
   factory MatchProfile.fromJson(Map<String, dynamic> json) {
     return MatchProfile(
       id: json['id'] ?? '',
-      firstName: json['firstName'] ?? 'Unknown',
+      firstName: json['firstName'] ?? Messages.unknownUser,
       age: json['age'] ?? 18,
-      location: json['location'] ?? 'Unknown Location',
+      location: json['location'] ?? Messages.unknownLocation,
       distance: json['distance'] ?? 0,
       bio: json['bio'],
       expectations: json['expectations'],
@@ -74,14 +75,14 @@ class MatchProfile {
   // --- 🟢 GHOSTING RADAR LOGIC ---
 
   String get activeStatusText {
-    if (lastSeen == null) return 'Recently';
+    if (lastSeen == null) return Messages.recently;
     final diff = DateTime.now().difference(lastSeen!);
 
-    if (diff.inMinutes < 20) return 'Active Now';
+    if (diff.inMinutes < 20) return Messages.activeNow;
     if (diff.inHours < 1) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays <= 3) return '${diff.inDays}d ago';
-    return 'Hibernating';
+    return Messages.hibernating;
   }
 
   Color get activeStatusColor {

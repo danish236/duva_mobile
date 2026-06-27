@@ -11,6 +11,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../services/compliance_engine.dart';
 import '../services/cache_service.dart';
+import '../messages.dart';
+import '../services/error_handler.dart';
 
 class ProfilePhotoState {
   dynamic image; // Can be a URL string or a File
@@ -196,7 +198,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             _currentImages[index].isRejected = true;
           });
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Image rejected by safety filters.'),
+            content: Text(Messages.imageRejectedSafetyShort),
             backgroundColor: AppTheme.primaryRose,
           ));
         }
@@ -212,13 +214,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
     if (_currentImages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must have at least one profile photo.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.needAtLeastOnePhoto)));
       return;
     }
 
     final isAnyChecking = _currentImages.any((photo) => photo.isChecking);
     if (isAnyChecking) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please wait for photos to finish checking.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.waitForPhotoCheck)));
       return;
     }
 
@@ -251,7 +253,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           setState(() => _isSaving = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Your profile contains inappropriate language or prohibited handles. Please keep it respectful.'),
+              content: Text(Messages.profanityDetected),
               backgroundColor: AppTheme.primaryRose,
               duration: Duration(seconds: 4),
             )
@@ -273,7 +275,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
-      if (finalImageUrls.isEmpty) throw Exception("No valid images to save.");
+      if (finalImageUrls.isEmpty) throw Exception(Messages.noValidImagesToSave);
 
       // 3. UPDATE PROFILE VIA BACKEND GATEKEEPER
       final dio = Dio();
@@ -329,7 +331,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       debugPrint("Error: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.redAccent, content: Text('Error: ${e.toString()}')));
+      ErrorHandler.showError(context, Messages.somethingWentWrong);
     } finally {
       if (mounted) {
         setState(() {
@@ -389,7 +391,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(data?['error'] ?? 'Failed to generate bio. Try again later.'),
+            content: Text(data?['error'] ?? Messages.unableToGenerateBio),
             backgroundColor: AppTheme.primaryRose,
           ),
         );
@@ -398,7 +400,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       debugPrint("Bio generation error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Something went wrong.'), backgroundColor: AppTheme.primaryRose),
+          SnackBar(content: Text(Messages.somethingWentWrong), backgroundColor: AppTheme.primaryRose),
         );
       }
     } finally {
@@ -523,12 +525,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         leading: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
         title: ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-          child: const Text('EDIT PROFILE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.2, color: Colors.white)),
+          child: const Text(Messages.editProfileTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.2, color: Colors.white)),
         ),
         actions: [
           _isSaving 
             ? const Padding(padding: EdgeInsets.all(16.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2)))
-            : TextButton(onPressed: _saveChanges, child: const Text('SAVE', style: TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.w900, letterSpacing: 1.2))),
+            : TextButton(onPressed: _saveChanges, child: const Text(Messages.saveButton, style: TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.w900, letterSpacing: 1.2))),
         ],
       ),
       body: Form(
@@ -537,9 +539,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           padding: const EdgeInsets.all(24),
           physics: const BouncingScrollPhysics(),
           children: [
-            _buildSectionLabel('YOUR PHOTOS'),
+            _buildSectionLabel(Messages.yourPhotos),
             const SizedBox(height: 8),
-            const Text('Long press and drag to reorder your photos. Your first photo is your main identity.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const Text(Messages.photoReorderHint, style: TextStyle(color: Colors.white54, fontSize: 12)),
             const SizedBox(height: 16),
             
             // THE NEW DRAG & DROP PHOTO GRID
@@ -547,11 +549,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 32),
 
-            _buildSectionLabel('YOUR DATE BID'),
+            _buildSectionLabel(Messages.yourDateBid),
             _buildTextField(_dateBidController, 'Active Date Bid', 'e.g., Coffee at 4PM', maxLength: 60),
             const SizedBox(height: 24),
             
-            _buildSectionLabel('PERSONAL INFO'),
+            _buildSectionLabel(Messages.personalInfo),
             _buildSelector('Gender', _selectedGender ?? 'Select', () => _showSinglePicker('Select Gender', _masterGenders, _selectedGender, (val) => setState(() => _selectedGender = val))),
             const SizedBox(height: 16),
             _buildSelector('Expectations', _selectedExpectation ?? 'Select', () => _showSinglePicker('Looking For', _masterExpectations, _selectedExpectation, (val) => setState(() => _selectedExpectation = val))),
@@ -562,7 +564,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: 32),
 
             // LIFESTYLE SECTION
-            _buildSectionLabel('LIFESTYLE'),
+            _buildSectionLabel(Messages.lifestyle),
             Row(
               children: [
                 Expanded(child: _buildSelector('Height', _selectedHeight ?? 'Select', () => _showSinglePicker('Height', _heightOptions, _selectedHeight, (val) => setState(() => _selectedHeight = val)))),
@@ -608,8 +610,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 32),
 
-            _buildSectionLabel('ABOUT YOU'),
-            _buildTextField(_bioController, 'Bio', 'A little bit about me...', maxLines: 4, maxLength: AppConstants.maxBioLength),
+            _buildSectionLabel(Messages.aboutYou),
+            _buildTextField(_bioController, Messages.bioLabel, Messages.bioHint, maxLines: 4, maxLength: AppConstants.maxBioLength),
 
             if (_bioCooldownDays > 0)
               Padding(
@@ -626,7 +628,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 children: [
                   Icon(Icons.auto_awesome, color: AppTheme.electricCyan, size: 14),
                   SizedBox(width: 6),
-                  Text('AI SUGGESTIONS', style: TextStyle(color: AppTheme.electricCyan, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  const Text(Messages.aiSuggestions, style: TextStyle(color: AppTheme.electricCyan, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                 ],
               ),
               const SizedBox(height: 12),
@@ -661,7 +663,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2))
                     : const Icon(Icons.auto_awesome, size: 18),
                 label: Text(
-                  _isGeneratingBio ? 'Generating...' : 'Generate Bio with AI',
+                  _isGeneratingBio ? Messages.generatingBio : Messages.generateBio,
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 style: OutlinedButton.styleFrom(
@@ -679,7 +681,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _saveChanges,
                 style: ElevatedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                child: _isSaving ? const CircularProgressIndicator(color: Colors.white) : const Text(Messages.saveChanges, style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
               ),
             ),
             const SizedBox(height: 40),
@@ -810,7 +812,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: AppTheme.primaryRose.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
-              child: const Text('MAIN', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
+              child: const Text(Messages.mainBadge, style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
             ),
           ),
           

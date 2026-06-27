@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../services/cache_service.dart';
 import '../services/api_service.dart';
+import '../messages.dart';
 import '../constants.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -68,12 +69,12 @@ Future<void> _fetchNotifications() async {
       backgroundColor: AppTheme.voidBackground,
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white), onPressed: () => Navigator.pop(context)),
-        title: const Text('NOTIFICATIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1.5, color: Colors.white)),
+        title: const Text(Messages.notificationsTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1.5, color: Colors.white)),
         actions: [
           if (_notifications.any((n) => n['is_read'] == false))
             TextButton(
               onPressed: _markAllAsRead,
-              child: const Text('MARK READ', style: TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+              child: const Text(Messages.markRead, style: TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, fontSize: 12)),
             )
         ],
       ),
@@ -126,7 +127,7 @@ Future<void> _fetchNotifications() async {
 
         // 3. Handle Paywall trigger
         if (isAdmirer) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock Premium to see admirers!')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.unlockPremiumAdmirers)));
         }
       },
       child: Container(
@@ -188,9 +189,9 @@ Future<void> _fetchNotifications() async {
         children: [
           Icon(Icons.notifications_none, size: 80, color: AppTheme.textSecondary.withValues(alpha: 0.2)),
           const SizedBox(height: 24),
-          const Text('The Void is Quiet', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          const Text(Messages.notificationsEmpty, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 12),
-          const Text('No new notifications right now.', style: TextStyle(color: AppTheme.textSecondary)),
+          const Text(Messages.notificationsEmptyBody, style: TextStyle(color: AppTheme.textSecondary)),
         ],
       ),
     );

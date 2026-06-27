@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_screen.dart';
 import '../theme.dart';
+import '../messages.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -57,16 +58,16 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   }
 
   String _getStrengthText() {
-    if (_passwordStrength == 1) return 'TOO SHORT (MIN 8 CHARS)';
-    if (_passwordStrength == 2) return 'WEAK - ADD UPPERCASE, LOWERCASE & DIGIT';
-    if (_passwordStrength == 3) return 'GOOD - ADD SPECIAL CHAR FOR STRONG';
-    if (_passwordStrength == 4) return 'SECURE PASSWORD';
-    return 'MINIMUM 8 CHARACTERS';
+    if (_passwordStrength == 1) return Messages.passwordStrengthTooShort;
+    if (_passwordStrength == 2) return Messages.passwordStrengthWeak;
+    if (_passwordStrength == 3) return Messages.passwordStrengthGood;
+    if (_passwordStrength == 4) return Messages.passwordStrengthSecure;
+    return Messages.passwordStrengthHint;
   }
 
   Future<void> _signUp() async {
     if (_passwordStrength < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password must be at least 8 characters with uppercase, lowercase, and a number.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.weakPassword)));
       return;
     }
 
@@ -83,17 +84,17 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
       String msg;
       switch (e.message) {
         case 'User already registered':
-          msg = 'An account with this email already exists.';
+          msg = Messages.emailAlreadyExists;
           break;
         case 'Password should be at least 6 characters':
-          msg = 'Password must be at least 8 characters long.';
+          msg = Messages.passwordTooShort;
           break;
         default:
-          msg = e.message;
+          msg = Messages.authFailed;
       }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.somethingWentWrong)));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -114,10 +115,10 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
             children: [
               ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-                child: const Text('INITIALIZE', style: TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 2)),
+                child: Text(Messages.registerTitle, style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 2)),
               ),
               const SizedBox(height: 8),
-              Text('JOIN THE ALIGNMENT PROTOCOL.', style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+              Text(Messages.registerSubtitle, style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               const SizedBox(height: 60),
               
               TextField(
@@ -180,7 +181,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                     child: Center(
                       child: _isLoading 
                         ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)) 
-                        : const Text('CREATE ACCOUNT', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                        : Text(Messages.registerButton, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                     ),
                   ),
                 ),

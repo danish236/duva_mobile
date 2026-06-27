@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dio/dio.dart';
+import '../messages.dart';
 import '../theme_notifier.dart'; 
 import '../theme.dart';
 import 'info_screen.dart';
@@ -41,14 +42,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               borderRadius: BorderRadius.circular(24), 
               side: BorderSide(color: AppTheme.primaryRose.withValues(alpha: 0.5))
             ),
-            title: const Text('Delete Account?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+            title: const Text(Messages.deleteAccountTitle, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
             content: const Text(
-              'This action is permanent and cannot be undone. All your alignments, messages, and data will be wiped from the void.',
+              Messages.deleteAccountBody,
               style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
             ),
             actions: [
               TextButton(
-                child: const Text('CANCEL', style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold)), 
+                child: const Text(Messages.cancel, style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold)), 
                 onPressed: () => Navigator.pop(context, false)
               ),
               Container(
@@ -57,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryRose, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('DELETE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)), 
+                  child: const Text(Messages.deleteConfirm, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)), 
                   onPressed: () => Navigator.pop(context, true)
                 ),
               ),
@@ -83,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('Deletion error: $e');
       setState(() => _isProcessing = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to delete account. Please try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.deleteFailed)));
     }
   }
 
@@ -98,7 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: IconButton(icon: Icon(Icons.arrow_back_ios, color: colorScheme.onSurface), onPressed: () => Navigator.pop(context)),
         title: ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(colors: [AppTheme.electricCyan, AppTheme.primaryRose]).createShader(bounds),
-          child: const Text('SETTINGS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
+          child: const Text(Messages.settingsTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, letterSpacing: 1.5, color: Colors.white)),
         ),
       ),
       body: _isProcessing 
@@ -146,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: _buildListTile(Icons.download_outlined, 'Request Data Export', colorScheme: colorScheme, onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     backgroundColor: AppTheme.electricCyan,
-                    content: const Row(children: [Icon(Icons.check_circle, color: Colors.white), SizedBox(width: 8), Text('Export link sent to email.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))])
+                    content: const Row(children: [Icon(Icons.check_circle, color: Colors.white), SizedBox(width: 8), Text(Messages.exportLinkSent, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))])
                   ));
                 }),
               ),
@@ -156,9 +157,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildGlassContainer(
                 child: Column(
                   children: [
-                    _buildListTile(Icons.logout, 'Sign Out', colorScheme: colorScheme, onTap: _signOut),
+                    _buildListTile(Icons.logout, Messages.signOut, colorScheme: colorScheme, onTap: _signOut),
                     Divider(height: 1, color: colorScheme.onSurface.withValues(alpha: 0.1)),
-                    _buildListTile(Icons.delete_forever, 'Delete Account', textColor: AppTheme.primaryRose, colorScheme: colorScheme, onTap: _deleteAccount),
+                    _buildListTile(Icons.delete_forever, Messages.deleteAccount, textColor: AppTheme.primaryRose, colorScheme: colorScheme, onTap: _deleteAccount),
                   ],
                 ),
               ),

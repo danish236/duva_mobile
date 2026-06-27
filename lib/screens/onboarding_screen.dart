@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../main.dart'; 
 import '../theme.dart';
+import '../messages.dart';
 import '../constants.dart';
 import 'package:dio/dio.dart';
 import '../services/compliance_engine.dart';
@@ -106,7 +107,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error loading options.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.errorLoadingOptions)));
       }
     } finally {
       setState(() {
@@ -143,11 +144,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _completeOnboarding() async {
     if (_images.isEmpty) { 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload at least one image'))); 
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.pleaseUploadImage))); 
       return; 
     }
     if (_selectedDate == null) { 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter your date of birth'))); 
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(Messages.pleaseEnterDob))); 
       return; 
     }
 
@@ -168,7 +169,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Your inputs contain inappropriate language or restricted handles. Please revise them.'),
+              content: Text(Messages.moderationRejected),
               backgroundColor: AppTheme.primaryRose,
               duration: Duration(seconds: 4),
             )
@@ -200,7 +201,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Image rejected by safety filters. Please upload a different photo.'),
+                content: Text(Messages.imageRejectedSafety),
                 backgroundColor: AppTheme.primaryRose,
               ),
             );
@@ -249,7 +250,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         options: options,
       );
 
-      if (response.statusCode != 200) throw Exception('Server rejected profile data');
+      if (response.statusCode != 200) throw Exception(Messages.serverRejectedProfile);
 
       // 5. Save interests
       final uniqueInterests = _selectedInterestIds.toSet().toList();
