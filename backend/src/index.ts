@@ -667,4 +667,45 @@ app.post('/profile', async (c) => {
   }
 });
 
+// --- TRUST & SAFETY: TEXT MODERATION ---
+app.post('/moderate-text', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { text } = await c.req.json();
+    
+    // If empty, nothing to moderate
+    if (!text || typeof text !== 'string' || text.trim() === '') {
+      return c.json({ isClean: true });
+    }
+
+    const ai = c.env.AI;
+    const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a highly strict Trust & Safety automated filter for a premium dating app. Read the user input. If it contains profanity, slurs, explicit sexual requests, severe toxicity, or insults, reply STRICTLY with 'DIRTY'. If it is completely clean and safe, reply STRICTLY with 'CLEAN'. Do not explain your answer." 
+        },
+        { 
+          role: "user", 
+          content: text 
+        }
+      ]
+    });
+
+    const responseText = (aiResponse.response as string).toUpperCase();
+    
+    // If the AI flags it as dirty, return false
+    const isClean = !responseText.includes('DIRTY');
+
+    return c.json({ isClean });
+  } catch (e) {
+    console.error("Moderation Error:", e);
+    // Fail open if the AI is down, so users aren't permanently locked out of saving
+    return c.json({ isClean: true }); 
+  }
+});
+
 export default app;

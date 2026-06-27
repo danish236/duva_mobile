@@ -7,6 +7,8 @@ import 'profile_screen.dart';
 import '../theme.dart';
 import '../services/image_service.dart';
 import '../constants.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ProfilePhotoState {
   dynamic image; // Can be a URL string or a File
@@ -191,7 +193,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    // Prevent saving if AI is still analyzing an image
     final isAnyChecking = _currentImages.any((photo) => photo.isChecking);
     if (isAnyChecking) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please wait for photos to finish checking.')));
@@ -204,28 +205,53 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
-      List<String> finalImageUrls = [];
+      final session = Supabase.instance.client.auth.currentSession;
+      
+      String? cleanText(String text) => text.trim().isEmpty ? null : text.trim();
+      final bioText = cleanText(_bioController.text);
 
+      // 🧠 1. CLOUDFLARE AI TEXT MODERATION
+      if (bioText != null) {
+        final dio = Dio();
+        final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+        
+        final modResponse = await dio.post(
+          '$apiUrl/moderate-text',
+          data: {'text': bioText},
+          options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
+        );
+
+        if (modResponse.data['isClean'] == false) {
+          if (!mounted) return;
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Your bio contains inappropriate language. Please keep it respectful.'),
+              backgroundColor: AppTheme.primaryRose,
+              duration: Duration(seconds: 4),
+            )
+          );
+          return; // 🚫 BLOCK THE SAVE OPERATION
+        }
+      }
+
+      // 2. PROCESS IMAGES
+      List<String> finalImageUrls = [];
       for (int i = 0; i < _currentImages.length; i++) {
         final photoState = _currentImages[i];
-        if (photoState.isRejected) continue; // Skip rejected photos completely
+        if (photoState.isRejected) continue; 
         
         final img = photoState.image;
         if (img is String) {
           finalImageUrls.add(img);
         }
-        // Files are already uploaded and swapped for Strings during _pickImage.
-        // If it's still a file here, something went wrong, so we skip it.
       }
 
-      if (finalImageUrls.isEmpty) {
-        throw Exception("No valid images to save.");
-      }
+      if (finalImageUrls.isEmpty) throw Exception("No valid images to save.");
 
-      String? cleanText(String text) => text.trim().isEmpty ? null : text.trim();
-
+      // 3. UPDATE SUPABASE DATABASE
       await Supabase.instance.client.from('profiles').update({
-        'bio': cleanText(_bioController.text),
+        'bio': bioText,
         'work': cleanText(_workController.text),
         'education': _selectedEducation,
         'expectations': _selectedExpectation,
@@ -243,6 +269,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'kids': _selectedKids,
       }).eq('id', userId);
 
+      // 4. UPDATE INTERESTS
       final uniqueInterests = _selectedInterestIds.toSet().toList();
       await Supabase.instance.client.from('profile_interests').delete().eq('profile_id', userId);
       
@@ -269,7 +296,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     }
   }
-  
   void _showSinglePicker(String title, List<String> options, String? currentValue, Function(String) onSelect) {
     showModalBottomSheet(
       context: context,
