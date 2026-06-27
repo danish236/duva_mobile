@@ -1,7 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import 'edit_profile_screen.dart'; 
 import '../theme.dart';
@@ -19,6 +17,7 @@ class ProfileData {
   final DateTime dob;
   final String? work;
   final String? education;
+  final String? gender;
   final List<String> images; 
   final String? expectations;
   final String? currentDateBid; 
@@ -36,7 +35,7 @@ class ProfileData {
 
   ProfileData({
     required this.id, required this.firstName, required this.lastName, required this.location, 
-    this.bio, required this.dob, this.work, this.education, required this.images, 
+    this.bio, required this.dob, this.work, this.education, this.gender, required this.images, 
     this.expectations, this.currentDateBid, required this.interests,
     this.height, this.weight, this.smoking, this.drinking, this.workout, this.pets, this.zodiac, this.kids,
     this.isPremium = false,
@@ -67,6 +66,7 @@ class ProfileData {
       dob: json['dob'] != null ? DateTime.parse(json['dob']) : DateTime.now(),
       work: json['work'],
       education: json['education'],
+      gender: json['gender'],
       images: json['images'] != null ? List<String>.from(json['images']) : [],
       expectations: json['expectations'],
       currentDateBid: json['current_date_bid'], 

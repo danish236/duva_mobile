@@ -45,35 +45,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<String> _generatedBios = [];
   int _bioCooldownDays = 0;
 
-  String? _selectedGender;
-  String? _selectedExpectation;
-  String? _selectedEducation;
+  int? _selectedGenderId;
+  int? _selectedExpectationId;
+  int? _selectedEducationId;
   
-  // Lifestyle State
+  // Lifestyle State (IDs from master tables)
   String? _selectedHeight;
-  String? _selectedSmoking;
-  String? _selectedDrinking;
-  String? _selectedWorkout;
-  String? _selectedPets;
-  String? _selectedZodiac;
-  String? _selectedKids;
+  int? _selectedSmokingId;
+  int? _selectedDrinkingId;
+  int? _selectedWorkoutId;
+  int? _selectedPetsId;
+  int? _selectedZodiacId;
+  int? _selectedKidsId;
 
-  List<String> _masterGenders = [];
-  List<String> _masterExpectations = [];
-  List<String> _masterEducation = [];
+  List<Map<String, dynamic>> _masterGenders = [];
+  List<Map<String, dynamic>> _masterExpectations = [];
+  List<Map<String, dynamic>> _masterEducation = [];
   List<Map<String, dynamic>> _masterInterests = [];
+  List<Map<String, dynamic>> _masterSmoking = [];
+  List<Map<String, dynamic>> _masterDrinking = [];
+  List<Map<String, dynamic>> _masterWorkout = [];
+  List<Map<String, dynamic>> _masterPets = [];
+  List<Map<String, dynamic>> _masterZodiac = [];
+  List<Map<String, dynamic>> _masterKids = [];
 
   List<ProfilePhotoState> _currentImages = [];
   final List<int> _selectedInterestIds = []; 
 
-  // Static standard lists for lifestyle
-  final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\""); 
-  final List<String> _smokingOptions = ['Never', 'Socially', 'Regularly', 'Trying to quit'];
-  final List<String> _drinkingOptions = ['Never', 'Socially', 'Regularly'];
-  final List<String> _workoutOptions = ['Everyday', 'Sometimes', 'Never'];
-  final List<String> _petsOptions = ['Dog', 'Cat', 'Both', 'None', 'Want them'];
-  final List<String> _zodiacOptions = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'];
-  final List<String> _kidsOptions = ['Want someday', 'Don\'t want', 'Have & want more', 'Have & don\'t want more'];
+  // Static standard lists for lifestyle (height only - generated range)
+  final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\"");
 
   @override
   void initState() {
@@ -85,12 +85,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _weightController.text = widget.currentProfile.weight ?? '';
     
     _selectedHeight = widget.currentProfile.height;
-    _selectedSmoking = widget.currentProfile.smoking;
-    _selectedDrinking = widget.currentProfile.drinking;
-    _selectedWorkout = widget.currentProfile.workout;
-    _selectedPets = widget.currentProfile.pets;
-    _selectedZodiac = widget.currentProfile.zodiac;
-    _selectedKids = widget.currentProfile.kids;
     
     // Initialize with ProfilePhotoState wrapper
     _currentImages = widget.currentProfile.images
@@ -107,17 +101,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final results = await Future.wait([
         cache.getOrFetchPersistent<List<dynamic>>(
           'master_genders',
-          () => client.from('master_genders').select('name').order('id').then((r) => List<dynamic>.from(r as List)),
+          () => client.from('master_genders').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
           ttl: AppConstants.cacheTtlMasterData,
         ),
         cache.getOrFetchPersistent<List<dynamic>>(
           'master_expectations',
-          () => client.from('master_expectations').select('name').order('id').then((r) => List<dynamic>.from(r as List)),
+          () => client.from('master_expectations').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
           ttl: AppConstants.cacheTtlMasterData,
         ),
         cache.getOrFetchPersistent<List<dynamic>>(
           'master_education',
-          () => client.from('master_education').select('name').order('id').then((r) => List<dynamic>.from(r as List)),
+          () => client.from('master_education').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
           ttl: AppConstants.cacheTtlMasterData,
         ),
         cache.getOrFetchPersistent<List<dynamic>>(
@@ -125,22 +119,68 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           () => client.from('master_interests').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
           ttl: AppConstants.cacheTtlMasterData,
         ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_smoking',
+          () => client.from('master_smoking').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_drinking',
+          () => client.from('master_drinking').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_workout',
+          () => client.from('master_workout').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_pets',
+          () => client.from('master_pets').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_zodiac',
+          () => client.from('master_zodiac').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_kids',
+          () => client.from('master_kids').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
       ]);
 
       if (!mounted) return;
 
+      int? idFromName(List<Map<String, dynamic>> list, String? name) {
+        if (name == null) return null;
+        final match = list.firstWhere((m) => m['name'] == name, orElse: () => {'id': null});
+        return match['id'] as int?;
+      }
+
       setState(() {
-        _masterGenders = (results[0] as List).map((e) => e['name'] as String).toList();
-        _masterExpectations = (results[1] as List).map((e) => e['name'] as String).toList();
-        _masterEducation = (results[2] as List).map((e) => e['name'] as String).toList();
+        _masterGenders = List<Map<String, dynamic>>.from(results[0]);
+        _masterExpectations = List<Map<String, dynamic>>.from(results[1]);
+        _masterEducation = List<Map<String, dynamic>>.from(results[2]);
         _masterInterests = List<Map<String, dynamic>>.from(results[3]);
-        
-        if (_masterExpectations.contains(widget.currentProfile.expectations)) {
-          _selectedExpectation = widget.currentProfile.expectations;
-        }
-        if (_masterEducation.contains(widget.currentProfile.education)) {
-          _selectedEducation = widget.currentProfile.education;
-        }
+        _masterSmoking = List<Map<String, dynamic>>.from(results[4]);
+        _masterDrinking = List<Map<String, dynamic>>.from(results[5]);
+        _masterWorkout = List<Map<String, dynamic>>.from(results[6]);
+        _masterPets = List<Map<String, dynamic>>.from(results[7]);
+        _masterZodiac = List<Map<String, dynamic>>.from(results[8]);
+        _masterKids = List<Map<String, dynamic>>.from(results[9]);
+
+        // Resolve profile string values back to master table IDs
+        _selectedGenderId = idFromName(_masterGenders, widget.currentProfile.gender);
+        _selectedExpectationId = idFromName(_masterExpectations, widget.currentProfile.expectations);
+        _selectedEducationId = idFromName(_masterEducation, widget.currentProfile.education);
+        _selectedSmokingId = idFromName(_masterSmoking, widget.currentProfile.smoking);
+        _selectedDrinkingId = idFromName(_masterDrinking, widget.currentProfile.drinking);
+        _selectedWorkoutId = idFromName(_masterWorkout, widget.currentProfile.workout);
+        _selectedPetsId = idFromName(_masterPets, widget.currentProfile.pets);
+        _selectedZodiacId = idFromName(_masterZodiac, widget.currentProfile.zodiac);
+        _selectedKidsId = idFromName(_masterKids, widget.currentProfile.kids);
 
         for (String interestName in widget.currentProfile.interests) {
           final match = _masterInterests.firstWhere((m) => m['name'] == interestName, orElse: () => {});
@@ -156,6 +196,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         });
       }
     }
+  }
+
+  String? _nameById(List<Map<String, dynamic>> list, int? id) {
+    if (id == null) return null;
+    final match = list.firstWhere((item) => item['id'] == id, orElse: () => {'name': null});
+    return match['name'] as String?;
   }
 
   Future<void> _pickImage() async {
@@ -288,22 +334,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'lastName': profile.lastName,
           'bio': bioText,
           'dob': profile.dob.toIso8601String().split('T')[0],
-          'gender': _selectedGender,
-          'lookingFor': null,
+          'gender_id': _selectedGenderId,
+          'looking_for_gender_id': null,
+          'expectations_id': _selectedExpectationId,
+          'education_id': _selectedEducationId,
           'images': finalImageUrls,
-          'expectations': _selectedExpectation,
           'work': cleanText(_workController.text),
-          'education': _selectedEducation,
           'location': cleanText(_locationController.text),
           'currentDateBid': cleanText(_dateBidController.text),
           'height': _selectedHeight,
           'weight': cleanText(_weightController.text),
-          'smoking': _selectedSmoking,
-          'drinking': _selectedDrinking,
-          'workout': _selectedWorkout,
-          'pets': _selectedPets,
-          'zodiac': _selectedZodiac,
-          'kids': _selectedKids,
+          'smoking_id': _selectedSmokingId,
+          'drinking_id': _selectedDrinkingId,
+          'workout_id': _selectedWorkoutId,
+          'pets_id': _selectedPetsId,
+          'zodiac_id': _selectedZodiacId,
+          'kids_id': _selectedKidsId,
         },
         options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
       );
@@ -406,6 +452,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } finally {
       if (mounted) setState(() => _isGeneratingBio = false);
     }
+  }
+
+  void _showIdPicker(String title, List<Map<String, dynamic>> options, int? currentId, Function(int) onSelect) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            padding: const EdgeInsets.only(top: 24, bottom: 40),
+            decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.98)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: ListView(
+                    children: options.map((option) {
+                      final id = option['id'] as int;
+                      final name = option['name'] as String;
+                      final isSelected = id == currentId;
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+                        title: Text(name, style: TextStyle(color: isSelected ? AppTheme.electricCyan : Colors.white, fontSize: 18, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.electricCyan) : null,
+                        onTap: () { onSelect(id); Navigator.pop(context); },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    );
   }
 
   void _showSinglePicker(String title, List<String> options, String? currentValue, Function(String) onSelect) {
@@ -554,11 +640,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: 24),
             
             _buildSectionLabel(Messages.personalInfo),
-            _buildSelector('Gender', _selectedGender ?? 'Select', () => _showSinglePicker('Select Gender', _masterGenders, _selectedGender, (val) => setState(() => _selectedGender = val))),
+            _buildSelector('Gender', _nameById(_masterGenders, _selectedGenderId) ?? 'Select', () => _showIdPicker('Select Gender', _masterGenders, _selectedGenderId, (val) => setState(() => _selectedGenderId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Expectations', _selectedExpectation ?? 'Select', () => _showSinglePicker('Looking For', _masterExpectations, _selectedExpectation, (val) => setState(() => _selectedExpectation = val))),
+            _buildSelector('Expectations', _nameById(_masterExpectations, _selectedExpectationId) ?? 'Select', () => _showIdPicker('Looking For', _masterExpectations, _selectedExpectationId, (val) => setState(() => _selectedExpectationId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Education', _selectedEducation ?? 'Select', () => _showSinglePicker('Education', _masterEducation, _selectedEducation, (val) => setState(() => _selectedEducation = val))),
+            _buildSelector('Education', _nameById(_masterEducation, _selectedEducationId) ?? 'Select', () => _showIdPicker('Education', _masterEducation, _selectedEducationId, (val) => setState(() => _selectedEducationId = val))),
             const SizedBox(height: 16),
             _buildTextField(_workController, 'Work', 'Job Title / Company', maxLength: 50),
             const SizedBox(height: 32),
@@ -573,17 +659,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildSelector('Workout', _selectedWorkout ?? 'Select', () => _showSinglePicker('Workout', _workoutOptions, _selectedWorkout, (val) => setState(() => _selectedWorkout = val))),
+            _buildSelector('Workout', _nameById(_masterWorkout, _selectedWorkoutId) ?? 'Select', () => _showIdPicker('Workout', _masterWorkout, _selectedWorkoutId, (val) => setState(() => _selectedWorkoutId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Smoking', _selectedSmoking ?? 'Select', () => _showSinglePicker('Smoking', _smokingOptions, _selectedSmoking, (val) => setState(() => _selectedSmoking = val))),
+            _buildSelector('Smoking', _nameById(_masterSmoking, _selectedSmokingId) ?? 'Select', () => _showIdPicker('Smoking', _masterSmoking, _selectedSmokingId, (val) => setState(() => _selectedSmokingId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Drinking', _selectedDrinking ?? 'Select', () => _showSinglePicker('Drinking', _drinkingOptions, _selectedDrinking, (val) => setState(() => _selectedDrinking = val))),
+            _buildSelector('Drinking', _nameById(_masterDrinking, _selectedDrinkingId) ?? 'Select', () => _showIdPicker('Drinking', _masterDrinking, _selectedDrinkingId, (val) => setState(() => _selectedDrinkingId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Pets', _selectedPets ?? 'Select', () => _showSinglePicker('Pets', _petsOptions, _selectedPets, (val) => setState(() => _selectedPets = val))),
+            _buildSelector('Pets', _nameById(_masterPets, _selectedPetsId) ?? 'Select', () => _showIdPicker('Pets', _masterPets, _selectedPetsId, (val) => setState(() => _selectedPetsId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Zodiac', _selectedZodiac ?? 'Select', () => _showSinglePicker('Zodiac', _zodiacOptions, _selectedZodiac, (val) => setState(() => _selectedZodiac = val))),
+            _buildSelector('Zodiac', _nameById(_masterZodiac, _selectedZodiacId) ?? 'Select', () => _showIdPicker('Zodiac', _masterZodiac, _selectedZodiacId, (val) => setState(() => _selectedZodiacId = val))),
             const SizedBox(height: 16),
-            _buildSelector('Kids', _selectedKids ?? 'Select', () => _showSinglePicker('Kids', _kidsOptions, _selectedKids, (val) => setState(() => _selectedKids = val))),
+            _buildSelector('Kids', _nameById(_masterKids, _selectedKidsId) ?? 'Select', () => _showIdPicker('Kids', _masterKids, _selectedKidsId, (val) => setState(() => _selectedKidsId = val))),
             const SizedBox(height: 32),
 
             _buildSectionLabel('INTERESTS'),

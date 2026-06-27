@@ -79,14 +79,18 @@ const validateImageMagicBytes = (bytes: Uint8Array): boolean => {
   return false;
 };
 
-const ALLOWED_GENDERS = ['male', 'female', 'non-binary', 'other', 'prefer not to say', 'male, female'];
-const ALLOWED_ZODIACS = ['aries', 'taurus', 'gemini', 'cancer', 'leo', 'virgo', 'libra', 'scorpio', 'sagittarius', 'capricorn', 'aquarius', 'pisces', ''];
-const ALLOWED_YESNO = ['yes', 'no', 'sometimes', '', 'prefer not to say'];
-const ALLOWED_KIDS = ['yes', 'no', 'sometimes', '', 'prefer not to say'];
-const ALLOWED_WORKOUT = ['daily', 'weekly', 'occasionally', 'never', ''];
-const ALLOWED_EDUCATION = ['high school', 'associate', 'bachelor', 'master', 'phd', 'trade school', 'prefer not to say', ''];
-const ALLOWED_EXPECTATIONS = ['casual', 'serious', 'friends', 'still figuring out', 'anything', ''];
-const ALLOWED_PETS = ['yes', 'no', 'want them', 'allergic', ''];
+const validateMasterId = async (supabase: any, table: string, id: unknown): Promise<boolean> => {
+  if (id === undefined || id === null) return true;
+  if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) return false;
+  const { data } = await supabase.from(table).select('id').eq('id', id).maybeSingle();
+  return !!data;
+};
+
+const resolveMasterName = async (supabase: any, table: string, id: number | null | undefined): Promise<string | null> => {
+  if (!id) return null;
+  const { data } = await supabase.from(table).select('name').eq('id', id).single();
+  return data?.name ?? null;
+};
 
 // --- 1. SECURE UPLOAD ROUTE WITH AI MODERATION ---
 app.post('/upload', async (c) => {
@@ -501,7 +505,7 @@ app.post('/preferences', async (c) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { min_age, max_age, filter_expectation, max_distance } = await c.req.json();
+    const { min_age, max_age, filter_expectation_id, filter_gender_id, filter_interests, max_distance } = await c.req.json();
 
     if (min_age !== undefined && typeof min_age === 'number' && min_age < 18) {
       return c.json({ error: 'Critical Security: Minimum age must be 18+.' }, 403);
@@ -515,12 +519,43 @@ app.post('/preferences', async (c) => {
        return c.json({ error: 'Distance must be between 1km and 500km.' }, 400);
     }
 
-    const { error } = await supabase.from('profiles').update({
-        min_age: min_age,
-        max_age: max_age,
-        max_distance: max_distance,
-        filter_expectation: filter_expectation === 'Any' ? null : filter_expectation
-    }).eq('id', user.id);
+    if (!(await validateMasterId(supabase, 'master_expectations', filter_expectation_id))) {
+      return c.json({ error: 'Invalid filter_expectation_id' }, 400);
+    }
+    if (!(await validateMasterId(supabase, 'master_genders', filter_gender_id))) {
+      return c.json({ error: 'Invalid filter_gender_id' }, 400);
+    }
+    if (filter_interests !== undefined && (!Array.isArray(filter_interests) || filter_interests.some((id: any) => typeof id !== 'number'))) {
+      return c.json({ error: 'filter_interests must be an array of numbers' }, 400);
+    }
+
+    const updatePrefs: any = {};
+
+    if (min_age !== undefined) updatePrefs.min_age = min_age;
+    if (max_age !== undefined) updatePrefs.max_age = max_age;
+    if (max_distance !== undefined) updatePrefs.max_distance = max_distance;
+
+    if (filter_expectation_id !== undefined && filter_expectation_id !== null) {
+      updatePrefs.filter_expectation = await resolveMasterName(supabase, 'master_expectations', filter_expectation_id);
+      updatePrefs.filter_expectation_id = filter_expectation_id;
+    } else if (filter_expectation_id === null) {
+      updatePrefs.filter_expectation = null;
+      updatePrefs.filter_expectation_id = null;
+    }
+
+    if (filter_gender_id !== undefined && filter_gender_id !== null) {
+      updatePrefs.filter_gender = await resolveMasterName(supabase, 'master_genders', filter_gender_id);
+      updatePrefs.filter_gender_id = filter_gender_id;
+    } else if (filter_gender_id === null) {
+      updatePrefs.filter_gender = null;
+      updatePrefs.filter_gender_id = null;
+    }
+
+    if (filter_interests !== undefined) {
+      updatePrefs.filter_interests = filter_interests;
+    }
+
+    const { error } = await supabase.from('profiles').update(updatePrefs).eq('id', user.id);
 
     if (error) throw error;
     return c.json({ success: true });
@@ -713,11 +748,11 @@ app.post('/profile', async (c) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { firstName, lastName, bio, dob, gender, lookingFor, images, expectations, work, education, location, currentDateBid, height, weight, smoking, drinking, workout, pets, zodiac, kids } = await c.req.json();
+    const { firstName, lastName, bio, dob, gender_id, looking_for_gender_id, images, expectations_id, work, education_id, location, currentDateBid, height, weight, smoking_id, drinking_id, workout_id, pets_id, zodiac_id, kids_id } = await c.req.json();
 
     // 1. Profanity filter on all text fields
     const spamRegex = /(fuck|shit|bitch|cunt|nigger|onlyfans|only fans|t\.me|telegram|insta|ig:|snapchat|sc:|\@)/i;
-    const textFields = [bio, firstName, work, location, currentDateBid, education, expectations].filter(Boolean);
+    const textFields = [bio, firstName, work, location, currentDateBid].filter(Boolean);
     for (const field of textFields) {
       if (spamRegex.test(String(field))) {
         return c.json({ error: 'Profile text contains prohibited language or social handles.' }, 400);
@@ -742,47 +777,26 @@ app.post('/profile', async (c) => {
       }
     }
 
-    // 4. Validate enum fields
-    if (gender !== undefined && gender !== null) {
-      const g = String(gender).toLowerCase();
-      if (!ALLOWED_GENDERS.includes(g)) return c.json({ error: 'Invalid gender value' }, 400);
+    // 4. Validate all IDs against master tables
+    const masterValidations: [string, string, unknown][] = [
+      ['master_genders', 'gender_id', gender_id],
+      ['master_genders', 'looking_for_gender_id', looking_for_gender_id],
+      ['master_education', 'education_id', education_id],
+      ['master_expectations', 'expectations_id', expectations_id],
+      ['master_smoking', 'smoking_id', smoking_id],
+      ['master_drinking', 'drinking_id', drinking_id],
+      ['master_workout', 'workout_id', workout_id],
+      ['master_pets', 'pets_id', pets_id],
+      ['master_zodiac', 'zodiac_id', zodiac_id],
+      ['master_kids', 'kids_id', kids_id],
+    ];
+
+    for (const [table, field, value] of masterValidations) {
+      if (!(await validateMasterId(supabase, table, value))) {
+        return c.json({ error: `Invalid ${field} value` }, 400);
+      }
     }
-    if (lookingFor !== undefined && lookingFor !== null) {
-      const lf = String(lookingFor).toLowerCase();
-      if (!ALLOWED_GENDERS.includes(lf)) return c.json({ error: 'Invalid lookingFor value' }, 400);
-    }
-    if (zodiac !== undefined && zodiac !== null) {
-      const z = String(zodiac).toLowerCase().trim();
-      if (!ALLOWED_ZODIACS.includes(z)) return c.json({ error: 'Invalid zodiac value' }, 400);
-    }
-    if (smoking !== undefined && smoking !== null) {
-      const s = String(smoking).toLowerCase().trim();
-      if (!ALLOWED_YESNO.includes(s)) return c.json({ error: 'Invalid smoking value' }, 400);
-    }
-    if (drinking !== undefined && drinking !== null) {
-      const d = String(drinking).toLowerCase().trim();
-      if (!ALLOWED_YESNO.includes(d)) return c.json({ error: 'Invalid drinking value' }, 400);
-    }
-    if (workout !== undefined && workout !== null) {
-      const w = String(workout).toLowerCase().trim();
-      if (!ALLOWED_WORKOUT.includes(w)) return c.json({ error: 'Invalid workout value' }, 400);
-    }
-    if (pets !== undefined && pets !== null) {
-      const p = String(pets).toLowerCase().trim();
-      if (!ALLOWED_PETS.includes(p)) return c.json({ error: 'Invalid pets value' }, 400);
-    }
-    if (kids !== undefined && kids !== null) {
-      const k = String(kids).toLowerCase().trim();
-      if (!ALLOWED_KIDS.includes(k)) return c.json({ error: 'Invalid kids value' }, 400);
-    }
-    if (education !== undefined && education !== null) {
-      const e = String(education).toLowerCase().trim();
-      if (!ALLOWED_EDUCATION.includes(e)) return c.json({ error: 'Invalid education value' }, 400);
-    }
-    if (expectations !== undefined && expectations !== null) {
-      const ex = String(expectations).toLowerCase().trim();
-      if (!ALLOWED_EXPECTATIONS.includes(ex)) return c.json({ error: 'Invalid expectations value' }, 400);
-    }
+
     if (height !== undefined && height !== null) {
       const h = String(height).trim();
       if (h.length > 20) return c.json({ error: 'Invalid height value' }, 400);
@@ -798,22 +812,55 @@ app.post('/profile', async (c) => {
     if (lastName !== undefined) updateData.last_name = lastName ? String(lastName).trim().substring(0, 30) : null;
     if (bio !== undefined) updateData.bio = bio ? String(bio).trim().substring(0, 300) : '';
     if (dob !== undefined) updateData.dob = dob;
-    if (gender !== undefined) updateData.gender = gender;
-    if (lookingFor !== undefined) updateData.looking_for_gender = lookingFor;
+
+    // Master-table fields: store FK ID + varchar name for backward compat
+    if (gender_id !== undefined) {
+      updateData.gender_id = gender_id;
+      updateData.gender = await resolveMasterName(supabase, 'master_genders', gender_id);
+    }
+    if (looking_for_gender_id !== undefined) {
+      updateData.looking_for_gender_id = looking_for_gender_id;
+      updateData.looking_for_gender = await resolveMasterName(supabase, 'master_genders', looking_for_gender_id);
+    }
+    if (expectations_id !== undefined) {
+      updateData.expectations_id = expectations_id;
+      updateData.expectations = await resolveMasterName(supabase, 'master_expectations', expectations_id);
+    }
+    if (education_id !== undefined) {
+      updateData.education_id = education_id;
+      updateData.education = await resolveMasterName(supabase, 'master_education', education_id);
+    }
+    if (smoking_id !== undefined) {
+      updateData.smoking_id = smoking_id;
+      updateData.smoking = await resolveMasterName(supabase, 'master_smoking', smoking_id);
+    }
+    if (drinking_id !== undefined) {
+      updateData.drinking_id = drinking_id;
+      updateData.drinking = await resolveMasterName(supabase, 'master_drinking', drinking_id);
+    }
+    if (workout_id !== undefined) {
+      updateData.workout_id = workout_id;
+      updateData.workout = await resolveMasterName(supabase, 'master_workout', workout_id);
+    }
+    if (pets_id !== undefined) {
+      updateData.pets_id = pets_id;
+      updateData.pets = await resolveMasterName(supabase, 'master_pets', pets_id);
+    }
+    if (zodiac_id !== undefined) {
+      updateData.zodiac_id = zodiac_id;
+      updateData.zodiac = await resolveMasterName(supabase, 'master_zodiac', zodiac_id);
+    }
+    if (kids_id !== undefined) {
+      updateData.kids_id = kids_id;
+      updateData.kids = await resolveMasterName(supabase, 'master_kids', kids_id);
+    }
+
     if (images !== undefined) updateData.images = validImages;
-    if (expectations !== undefined) updateData.expectations = expectations;
     if (work !== undefined) updateData.work = work ? String(work).trim().substring(0, 100) : null;
-    if (education !== undefined) updateData.education = education;
     if (location !== undefined) updateData.location = location ? String(location).trim().substring(0, 100) : 'Unknown Location';
     if (currentDateBid !== undefined) updateData.current_date_bid = currentDateBid ? String(currentDateBid).trim().substring(0, 200) : null;
     if (height !== undefined) updateData.height = height;
     if (weight !== undefined) updateData.weight = weight;
-    if (smoking !== undefined) updateData.smoking = smoking;
-    if (drinking !== undefined) updateData.drinking = drinking;
-    if (workout !== undefined) updateData.workout = workout;
-    if (pets !== undefined) updateData.pets = pets;
-    if (zodiac !== undefined) updateData.zodiac = zodiac;
-    if (kids !== undefined) updateData.kids = kids;
 
     const { error } = await supabase.from('profiles').upsert(updateData);
 

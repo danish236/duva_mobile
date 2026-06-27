@@ -23,12 +23,13 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
   RangeValues _ageRange = const RangeValues(18, 40);
   double _distance = 50.0;
-  String? _selectedGender;
-  String _selectedExpectation = 'Any';
+  int? _selectedGenderId;
+  int? _selectedExpectationId;
   List<int> _selectedInterestIds = [];
 
   List<Map<String, dynamic>> _masterInterests = [];
   List<Map<String, dynamic>> _masterGenders = [];
+  List<Map<String, dynamic>> _masterExpectations = [];
 
   @override
   void initState() {
@@ -50,11 +51,17 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
         () => supabase.from('master_genders').select().then((r) => List<dynamic>.from(r as List)),
         ttl: AppConstants.cacheTtlMasterData,
       );
+      final expectations = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_expectations',
+        () => supabase.from('master_expectations').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
       
       if (mounted) {
         setState(() {
           _masterInterests = List<Map<String, dynamic>>.from(interests);
           _masterGenders = List<Map<String, dynamic>>.from(genders);
+          _masterExpectations = List<Map<String, dynamic>>.from(expectations);
           _isLoading = false;
         });
       }
@@ -78,8 +85,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
           'min_age': _ageRange.start.round(), 
           'max_age': _ageRange.end.round(), 
           'max_distance': _distance.round(), 
-          'filter_expectation': _selectedExpectation,
-          'filter_gender': _selectedGender,
+          'filter_expectation_id': _selectedExpectationId,
+          'filter_gender_id': _selectedGenderId,
           'filter_interests': _selectedInterestIds,
         }, 
         options: options
@@ -93,8 +100,6 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       backgroundColor: AppTheme.voidBackground,
       appBar: AppBar(
@@ -152,9 +157,11 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                     Wrap(
                       spacing: 12, runSpacing: 12,
                       children: _masterGenders.map((g) {
-                        final isSelected = _selectedGender == g['name'];
+                        final id = g['id'] as int;
+                        final name = g['name'] as String;
+                        final isSelected = _selectedGenderId == id;
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedGender = g['name']),
+                          onTap: () => setState(() => _selectedGenderId = id),
                           child: AnimatedContainer(
                             duration: AppConstants.imageTransitionDuration,
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -163,7 +170,35 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: isSelected ? AppTheme.primaryRose : Colors.white12),
                             ),
-                            child: Text(g['name'], style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppTheme.textSecondary)),
+                            child: Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppTheme.textSecondary)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 32),
+
+                    _buildHeader('LOOKING FOR'),
+                    Wrap(
+                      spacing: 12, runSpacing: 12,
+                      children: _masterExpectations.map((e) {
+                        final id = e['id'] as int;
+                        final name = e['name'] as String;
+                        final isSelected = _selectedExpectationId == id;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedExpectationId = isSelected ? null : id;
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: AppConstants.imageTransitionDuration,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppTheme.electricCyan : AppTheme.surfaceGlass,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: isSelected ? AppTheme.electricCyan : Colors.white12),
+                            ),
+                            child: Text(name, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppTheme.textSecondary)),
                           ),
                         );
                       }).toList(),

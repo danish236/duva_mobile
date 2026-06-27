@@ -36,19 +36,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _weightController = TextEditingController();
   DateTime? _selectedDate;
 
-  // New Lifestyle State
+  // New Lifestyle State (IDs from master tables)
   String? _selectedHeight;
-  String? _selectedSmoking;
-  String? _selectedDrinking;
-  String? _selectedWorkout;
-  String? _selectedPets;
-  String? _selectedZodiac;
-  String? _selectedKids;
+  int? _selectedSmokingId;
+  int? _selectedDrinkingId;
+  int? _selectedWorkoutId;
+  int? _selectedPetsId;
+  int? _selectedZodiacId;
+  int? _selectedKidsId;
 
   List<Map<String, dynamic>> _masterGenders = [];
   List<Map<String, dynamic>> _masterInterests = [];
   List<Map<String, dynamic>> _masterExpectations = [];
   List<Map<String, dynamic>> _masterEducation = [];
+  List<Map<String, dynamic>> _masterSmoking = [];
+  List<Map<String, dynamic>> _masterDrinking = [];
+  List<Map<String, dynamic>> _masterWorkout = [];
+  List<Map<String, dynamic>> _masterPets = [];
+  List<Map<String, dynamic>> _masterZodiac = [];
+  List<Map<String, dynamic>> _masterKids = [];
 
   int? _selectedGenderId;
   int? _selectedExpectationId;
@@ -58,12 +64,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final Map<int, _ImageState> _imageStates = {};
 
   final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\"");
-  final List<String> _smokingOptions = ['Never', 'Socially', 'Regularly', 'Trying to quit'];
-  final List<String> _drinkingOptions = ['Never', 'Socially', 'Regularly'];
-  final List<String> _workoutOptions = ['Everyday', 'Sometimes', 'Never'];
-  final List<String> _petsOptions = ['Dog', 'Cat', 'Both', 'None', 'Want them'];
-  final List<String> _zodiacOptions = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'];
-  final List<String> _kidsOptions = ['Want someday', 'Don\'t want', 'Have & want more', 'Have & don\'t want more'];
 
   @override
   void initState() {
@@ -98,12 +98,48 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         () => supabase.from('master_education').select().then((r) => List<dynamic>.from(r as List)),
         ttl: AppConstants.cacheTtlMasterData,
       );
+      final smokingResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_smoking',
+        () => supabase.from('master_smoking').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final drinkingResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_drinking',
+        () => supabase.from('master_drinking').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final workoutResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_workout',
+        () => supabase.from('master_workout').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final petsResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_pets',
+        () => supabase.from('master_pets').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final zodiacResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_zodiac',
+        () => supabase.from('master_zodiac').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final kidsResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_kids',
+        () => supabase.from('master_kids').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
 
       setState(() {
         _masterGenders = List<Map<String, dynamic>>.from(gendersResponse);
         _masterInterests = List<Map<String, dynamic>>.from(interestsResponse);
         _masterExpectations = List<Map<String, dynamic>>.from(expectationsResponse);
         _masterEducation = List<Map<String, dynamic>>.from(educationResponse);
+        _masterSmoking = List<Map<String, dynamic>>.from(smokingResponse);
+        _masterDrinking = List<Map<String, dynamic>>.from(drinkingResponse);
+        _masterWorkout = List<Map<String, dynamic>>.from(workoutResponse);
+        _masterPets = List<Map<String, dynamic>>.from(petsResponse);
+        _masterZodiac = List<Map<String, dynamic>>.from(zodiacResponse);
+        _masterKids = List<Map<String, dynamic>>.from(kidsResponse);
       });
     } catch (e) {
       if (mounted) {
@@ -225,15 +261,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
       } catch (_) {}
 
-      // 3. Resolve master data names
-      final String? selectedGenderName = _selectedGenderId != null 
-          ? _masterGenders.firstWhere((g) => g['id'] == _selectedGenderId, orElse: () => {'name': null})['name'] 
-          : null;
-      final String? selectedExpectationName = _selectedExpectationId != null 
-          ? _masterExpectations.firstWhere((e) => e['id'] == _selectedExpectationId, orElse: () => {'name': null})['name'] 
-          : null;
-
-      // 4. Send profile to Gatekeeper
+      // 3. Send profile to Gatekeeper (all IDs, resolved by backend)
       final options = await _getSecureOptions();
       final response = await dioClient.post(
         '$apiUrl/profile',
@@ -242,10 +270,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'lastName': _lastNameController.text.trim(),
           'bio': _bioController.text.trim(),
           'dob': "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}",
-          'gender': selectedGenderName,
-          'lookingFor': null, // Update this if you add a lookingFor controller
+          'gender_id': _selectedGenderId,
+          'expectations_id': _selectedExpectationId,
+          'education_id': _selectedEducationId,
+          'looking_for_gender_id': null,
+          'height': _selectedHeight,
+          'weight': _weightController.text.trim().isEmpty ? null : _weightController.text.trim(),
+          'smoking_id': _selectedSmokingId,
+          'drinking_id': _selectedDrinkingId,
+          'workout_id': _selectedWorkoutId,
+          'pets_id': _selectedPetsId,
+          'zodiac_id': _selectedZodiacId,
+          'kids_id': _selectedKidsId,
           'images': imageUrls,
-          'expectations': selectedExpectationName,
         },
         options: options,
       );
@@ -271,6 +308,52 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showIdPicker(String title, List<Map<String, dynamic>> options, int? currentId, Function(int) onSelect) {
+    showModalBottomSheet(
+      context: context, 
+      backgroundColor: Colors.transparent, 
+      isScrollControlled: true,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.6,
+              padding: const EdgeInsets.only(top: 24, bottom: 40),
+              decoration: BoxDecoration(color: AppTheme.surfaceGlass.withValues(alpha: 0.9)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: ListView(
+                      children: options.map((option) {
+                        final id = option['id'] as int;
+                        final name = option['name'] as String;
+                        final isSelected = id == currentId;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+                          title: Text(name, style: TextStyle(color: isSelected ? AppTheme.electricCyan : Colors.white, fontSize: 18, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: AppTheme.electricCyan) : null,
+                          onTap: () { 
+                            onSelect(id); 
+                            Navigator.pop(context); 
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    );
   }
 
   void _showSinglePicker(String title, List<String> options, String? currentValue, Function(String) onSelect) {
@@ -561,21 +644,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildSelector('Workout', _selectedWorkout ?? 'Select', () => _showSinglePicker('Workout', _workoutOptions, _selectedWorkout, (val) => setState(() => _selectedWorkout = val))),
+          _buildSelector('Workout', _nameById(_masterWorkout, _selectedWorkoutId) ?? 'Select', () => _showIdPicker('Workout', _masterWorkout, _selectedWorkoutId, (val) => setState(() => _selectedWorkoutId = val))),
           const SizedBox(height: 16),
-          _buildSelector('Smoking', _selectedSmoking ?? 'Select', () => _showSinglePicker('Smoking', _smokingOptions, _selectedSmoking, (val) => setState(() => _selectedSmoking = val))),
+          _buildSelector('Smoking', _nameById(_masterSmoking, _selectedSmokingId) ?? 'Select', () => _showIdPicker('Smoking', _masterSmoking, _selectedSmokingId, (val) => setState(() => _selectedSmokingId = val))),
           const SizedBox(height: 16),
-          _buildSelector('Drinking', _selectedDrinking ?? 'Select', () => _showSinglePicker('Drinking', _drinkingOptions, _selectedDrinking, (val) => setState(() => _selectedDrinking = val))),
+          _buildSelector('Drinking', _nameById(_masterDrinking, _selectedDrinkingId) ?? 'Select', () => _showIdPicker('Drinking', _masterDrinking, _selectedDrinkingId, (val) => setState(() => _selectedDrinkingId = val))),
           const SizedBox(height: 16),
-          _buildSelector('Pets', _selectedPets ?? 'Select', () => _showSinglePicker('Pets', _petsOptions, _selectedPets, (val) => setState(() => _selectedPets = val))),
+          _buildSelector('Pets', _nameById(_masterPets, _selectedPetsId) ?? 'Select', () => _showIdPicker('Pets', _masterPets, _selectedPetsId, (val) => setState(() => _selectedPetsId = val))),
           const SizedBox(height: 16),
-          _buildSelector('Zodiac', _selectedZodiac ?? 'Select', () => _showSinglePicker('Zodiac', _zodiacOptions, _selectedZodiac, (val) => setState(() => _selectedZodiac = val))),
+          _buildSelector('Zodiac', _nameById(_masterZodiac, _selectedZodiacId) ?? 'Select', () => _showIdPicker('Zodiac', _masterZodiac, _selectedZodiacId, (val) => setState(() => _selectedZodiacId = val))),
           const SizedBox(height: 16),
-          _buildSelector('Kids', _selectedKids ?? 'Select', () => _showSinglePicker('Kids', _kidsOptions, _selectedKids, (val) => setState(() => _selectedKids = val))),
+          _buildSelector('Kids', _nameById(_masterKids, _selectedKidsId) ?? 'Select', () => _showIdPicker('Kids', _masterKids, _selectedKidsId, (val) => setState(() => _selectedKidsId = val))),
           const SizedBox(height: 60),
         ],
       ),
     );
+  }
+
+  String? _nameById(List<Map<String, dynamic>> list, int? id) {
+    if (id == null) return null;
+    final match = list.firstWhere((item) => item['id'] == id, orElse: () => {'name': null});
+    return match['name'] as String?;
   }
 
   Widget _buildSelector(String label, String value, VoidCallback onTap) {
