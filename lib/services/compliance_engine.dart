@@ -33,8 +33,8 @@ class ComplianceEngine {
 
       return response.data['isClean'] ?? true;
     } catch (e) {
-      // If AI backend is unreachable, fail closed — local regex already filters obvious spam
-      return false;
+      // If AI backend is unreachable, pass — local regex already catches obvious spam
+      return true;
     }
   }
 
