@@ -10,6 +10,11 @@ import '../theme.dart';
 import '../constants.dart';
 import 'package:dio/dio.dart' as dio_pkg;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../services/compliance_engine.dart';
+import '../services/cache_service.dart';
+import '../services/image_service.dart';
+
+enum _ImageState { idle, checking, rejected }
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -49,6 +54,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int? _selectedEducationId;
   final List<int> _selectedInterestIds = [];
   final List<File> _images = [];
+  final Map<int, _ImageState> _imageStates = {};
 
   final List<String> _heightOptions = List.generate(48, (index) => "${4 + (index ~/ 12)}'${index % 12}\"");
   final List<String> _smokingOptions = ['Never', 'Socially', 'Regularly', 'Trying to quit'];
@@ -69,11 +75,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _isLoading = true;
     });
     try {
+      final cache = CacheService();
       final supabase = Supabase.instance.client;
-      final gendersResponse = await supabase.from('master_genders').select();
-      final interestsResponse = await supabase.from('master_interests').select();
-      final expectationsResponse = await supabase.from('master_expectations').select();
-      final educationResponse = await supabase.from('master_education').select();
+      final gendersResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_genders',
+        () => supabase.from('master_genders').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final interestsResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_interests',
+        () => supabase.from('master_interests').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final expectationsResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_expectations',
+        () => supabase.from('master_expectations').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final educationResponse = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_education',
+        () => supabase.from('master_education').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
 
       setState(() {
         _masterGenders = List<Map<String, dynamic>>.from(gendersResponse);
@@ -107,6 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (pickedFile != null) {
       setState(() {
         _images.add(File(pickedFile.path));
+        _imageStates[_images.length - 1] = _ImageState.idle;
       });
     }
   }
@@ -129,25 +153,60 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     setState(() => _isLoading = true);
     
+    // 🛡️ NEW: CLOUDFLARE AI TEXT MODERATION
+    final allTextInputs = [
+      _firstNameController.text,
+      _lastNameController.text,
+      _bioController.text,
+      _workController.text
+    ].where((t) => t.trim().isNotEmpty).join(" . ");
+
+    if (allTextInputs.isNotEmpty) {
+      final isClean = await ComplianceEngine.isTextClean(allTextInputs);
+      if (!isClean) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Your inputs contain inappropriate language or restricted handles. Please revise them.'),
+              backgroundColor: AppTheme.primaryRose,
+              duration: Duration(seconds: 4),
+            )
+          );
+        }
+        return; // 🚫 Block submission before it hits your backend
+      }
+    }
+    
     try {
       final user = Supabase.instance.client.auth.currentUser!;
       final dioClient = dio_pkg.Dio();
       final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
 
-      // 1. Upload images (Using Cloudflare NSFW filter)
+      // 1. Upload images with AI moderation checking states
       List<String> imageUrls = [];
       for (int i = 0; i < _images.length; i++) {
-        final file = _images[i];
-        final fileName = '${user.id}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        
-        final options = await _getSecureOptions();
-        final formData = dio_pkg.FormData.fromMap({
-          'image': await dio_pkg.MultipartFile.fromFile(file.path, filename: fileName),
-        });
-
-        final uploadRes = await dioClient.post('$apiUrl/upload', data: formData, options: options);
-        if (uploadRes.data['url'] != null) {
-          imageUrls.add(uploadRes.data['url']);
+        setState(() => _imageStates[i] = _ImageState.checking);
+        try {
+          final url = await ImageService.compressAndUploadImage(_images[i], user.id, i);
+          if (url != null) {
+            imageUrls.add(url);
+            setState(() => _imageStates[i] = _ImageState.idle);
+          } else {
+            throw Exception('Upload returned no URL');
+          }
+        } catch (e) {
+          setState(() => _imageStates[i] = _ImageState.rejected);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Image rejected by safety filters. Please upload a different photo.'),
+                backgroundColor: AppTheme.primaryRose,
+              ),
+            );
+          }
+          setState(() => _isLoading = false);
+          return;
         }
       }
 
@@ -598,21 +657,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               itemCount: 6,
               itemBuilder: (context, index) {
                 if (index < _images.length) {
+                  final state = _imageStates[index] ?? _ImageState.idle;
                   return Stack(
                     fit: StackFit.expand,
                     children: [
                       ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_images[index], fit: BoxFit.cover)),
-                      Positioned(
-                        top: 4, right: 4,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _images.removeAt(index);
-                            });
-                          },
-                          child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle), child: const Icon(Icons.close, color: Colors.white, size: 16)),
+                      if (state == _ImageState.checking)
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            color: Colors.black54,
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2)),
+                              SizedBox(height: 8),
+                              Text('AI Checking...', style: TextStyle(color: AppTheme.electricCyan, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
                         ),
-                      ),
+                      if (state == _ImageState.rejected)
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            color: Colors.black54,
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.block, color: Colors.white, size: 28),
+                              SizedBox(height: 4),
+                              Text('NSFW', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                            ],
+                          ),
+                        ),
+                      if (state == _ImageState.idle)
+                        Positioned(
+                          top: 4, right: 4,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _images.removeAt(index);
+                                _imageStates.remove(index);
+                              });
+                            },
+                            child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle), child: const Icon(Icons.close, color: Colors.white, size: 16)),
+                          ),
+                        ),
                     ],
                   );
                 } else {

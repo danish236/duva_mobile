@@ -13,6 +13,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/profile_modal.dart';
 import '../constants.dart';
+import '../services/cache_service.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -30,6 +31,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
   int _currentPage = 0;
   bool _hasMore = true;
   bool _isFetchingMore = false;
+  int _todaySwipeCount = 0;
   final dio = Dio();
   final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
   
@@ -69,10 +71,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Future<void> _initLocationAndPool() async {
     final myId = Supabase.instance.client.auth.currentUser?.id;
     if (myId != null) {
-      final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId).single();
+      final cached = await CacheService().getOrFetch<Map<String, dynamic>>(
+        'is_premium',
+        () async {
+          final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId).single();
+          return Map<String, dynamic>.from(profile);
+        },
+        ttl: AppConstants.cacheTtlPremium,
+      );
       if (mounted) {
         setState(() {
-          _isPremium = profile['is_premium'] ?? false;
+          _isPremium = cached['is_premium'] ?? false;
         });
       }
     }
@@ -80,6 +89,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _hasMore = true;
     _currentPage = 0;
     _potentialMatches.clear();
+
+    if (!_isPremium) await _fetchTodaySwipeCount();
 
     await _updateUserLocation();
     await _fetchPool();
@@ -159,8 +170,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
+    if (!_isPremium && _todaySwipeCount >= AppConstants.freeDailySwipes) {
+      _showSwipeLimitReached();
+      return false;
+    }
+
     final profileId = _potentialMatches[previousIndex].id;
-    
+    _todaySwipeCount++;
+
     if (direction == CardSwiperDirection.right) {
       _executeSwipeBackend('like', profileId);
     } else if (direction == CardSwiperDirection.left) {
@@ -176,10 +193,70 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return true; 
   }
 
+  void _showSwipeLimitReached() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: AppTheme.voidBackground,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          border: Border.all(color: AppTheme.primaryRose.withValues(alpha: 0.3)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.hourglass_empty, color: AppTheme.primaryRose, size: 48),
+              const SizedBox(height: 16),
+              const Text('Daily Swipes Exhausted', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              const Text('You\'ve used all your free swipes for today. Upgrade to Duva Black for unlimited swipes.', textAlign: TextAlign.center, style: TextStyle(color: AppTheme.textSecondary)),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // Navigate to premium screen
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryRose, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                  child: const Text('GET DUVA BLACK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Come back tomorrow', style: TextStyle(color: AppTheme.textSecondary)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _onEnd() {
     setState(() {
       _potentialMatches.clear();
     });
+  }
+
+  Future<void> _fetchTodaySwipeCount() async {
+    final myId = Supabase.instance.client.auth.currentUser?.id;
+    if (myId == null) return;
+    try {
+      final today = DateTime.now();
+      final startOfDay = DateTime(today.year, today.month, today.day).toIso8601String();
+      final swipes = await Supabase.instance.client
+          .from('swipes')
+          .select('id')
+          .eq('swiper_id', myId)
+          .gte('created_at', startOfDay);
+      if (mounted) setState(() => _todaySwipeCount = swipes.length);
+    } catch (e) {
+      debugPrint("Failed to fetch swipe count: $e");
+    }
   }
 
   Future<void> _executeSwipeBackend(String action, String profileId) async {
@@ -295,9 +372,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Future<void> _fetchAndShowReportReasons(MatchProfile profile) async {
     try {
-      final options = await _getSecureOptions();
-      final response = await dio.get('$apiUrl/reasons?type=report', options: options);
-      final List reasons = response.data;
+      final List reasons = await CacheService().getOrFetchPersistent<List<dynamic>>(
+        'report_reasons',
+        () async {
+          final options = await _getSecureOptions();
+          final response = await dio.get('$apiUrl/reasons?type=report', options: options);
+          return List<dynamic>.from(response.data);
+        },
+        ttl: AppConstants.cacheTtlReasons,
+      );
 
       if (!mounted) return;
 
@@ -348,7 +431,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       
       await dio.post(
         '$apiUrl$endpoint', 
-        data: action == 'report' ? {'reported_id': targetId, 'reason_id': reasonId} : {'blocked_id': targetId, 'reason_id': 1}, 
+        data: action == 'report' ? {'reported_id': targetId, 'reason_id': reasonId} : {'blocked_id': targetId}, 
         options: options
       );
 
@@ -486,11 +569,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
               children: [
                 _buildGlassButton(Icons.replay, Colors.amber, _triggerRewind, size: 50),
                 const SizedBox(width: 16),
-                _buildGlassButton(Icons.close, Colors.white, () => _swiperController.swipe(CardSwiperDirection.left)),
+                _buildGlassButton(Icons.close, Colors.white, () {
+                  if (!_isPremium && _todaySwipeCount >= AppConstants.freeDailySwipes) {
+                    _showSwipeLimitReached();
+                  } else {
+                    _swiperController.swipe(CardSwiperDirection.left);
+                  }
+                }),
                 const SizedBox(width: 16),
-                _buildGlassButton(Icons.flare, AppTheme.electricCyan, () => _swiperController.swipe(CardSwiperDirection.top), size: 50),
+                _buildGlassButton(Icons.flare, AppTheme.electricCyan, () {
+                  if (!_isPremium && _todaySwipeCount >= AppConstants.freeDailySwipes) {
+                    _showSwipeLimitReached();
+                  } else {
+                    _swiperController.swipe(CardSwiperDirection.top);
+                  }
+                }, size: 50),
                 const SizedBox(width: 16),
-                _buildGlassButton(Icons.favorite, AppTheme.primaryRose, () => _swiperController.swipe(CardSwiperDirection.right)),
+                _buildGlassButton(Icons.favorite, AppTheme.primaryRose, () {
+                  if (!_isPremium && _todaySwipeCount >= AppConstants.freeDailySwipes) {
+                    _showSwipeLimitReached();
+                  } else {
+                    _swiperController.swipe(CardSwiperDirection.right);
+                  }
+                }),
                 const SizedBox(width: 16),
                 _buildGlassButton(Icons.info_outline, AppTheme.electricCyan, () {
                   if (_potentialMatches.isEmpty) return; 
@@ -511,8 +612,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final remaining = AppConstants.freeDailySwipes - _todaySwipeCount;
     return AppBar(
       title: Image.asset('assets/logo_nobg.png', height: 32, color: Colors.white),
+      leading: !_isPremium
+          ? Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: remaining > 0 ? AppTheme.electricCyan.withValues(alpha: 0.15) : AppTheme.primaryRose.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: remaining > 0 ? AppTheme.electricCyan.withValues(alpha: 0.3) : AppTheme.primaryRose.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  remaining > 0 ? '$remaining' : '0',
+                  style: TextStyle(
+                    color: remaining > 0 ? AppTheme.electricCyan : AppTheme.primaryRose,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            )
+          : null,
       actions: [
         IconButton(
           icon: const Icon(Icons.tune, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 10)]), 

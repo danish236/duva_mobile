@@ -708,4 +708,74 @@ app.post('/moderate-text', async (c) => {
   }
 });
 
+// --- 12. AI BIO GENERATION (Once per week) ---
+app.post('/generate-bio', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { interests, work, education, expectations, current_bio } = await c.req.json();
+
+    // 1. Check 7-day cooldown
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('last_bio_generation_at')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.last_bio_generation_at) {
+      const lastGen = new Date(profile.last_bio_generation_at);
+      const now = new Date();
+      const diffDays = Math.floor((now.getTime() - lastGen.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays < 7) {
+        return c.json({ cooldown_days: 7 - diffDays });
+      }
+    }
+
+    // 2. Generate 3 bios via Cloudflare AI
+    const ai = c.env.AI;
+    const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [
+        {
+          role: "system",
+          content: "You are a creative dating profile bio writer. Generate 3 short, engaging, and unique bio options for a dating app profile. Base them on the user's interests, work, education, and relationship expectations. Each bio must be under 200 characters. Return EXACTLY a JSON array of 3 strings. Do not include markdown, greetings, or explanations. Example: [\"bio 1\", \"bio 2\", \"bio 3\"]"
+        },
+        {
+          role: "user",
+          content: `Interests: ${interests?.join(', ') || 'None specified'}. Work: ${work || 'Not specified'}. Education: ${education || 'Not specified'}. Looking for: ${expectations || 'Not specified'}. Current bio: ${current_bio || 'None'}. Generate 3 unique bio options.`
+        }
+      ]
+    });
+
+    let rawText = (aiResponse.response as string).trim();
+    if (rawText.startsWith('```json')) rawText = rawText.replace(/```json/g, '');
+    if (rawText.startsWith('```')) rawText = rawText.replace(/```/g, '');
+    rawText = rawText.trim();
+
+    let bios: string[];
+    try {
+      bios = JSON.parse(rawText);
+      if (!Array.isArray(bios) || bios.length === 0) throw new Error('Invalid format');
+    } catch {
+      bios = [
+        "I'm all about good vibes and great conversations. Let's see where this goes!",
+        "Exploring life one adventure at a time. Coffee and deep talks are my love language.",
+        "Just a regular person looking for something real. If you love dogs and sunsets, we'll get along!"
+      ];
+    }
+
+    // 3. Update cooldown timestamp
+    await supabase
+      .from('profiles')
+      .update({ last_bio_generation_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    return c.json({ bios, cooldown_days: 7 });
+  } catch (e) {
+    console.error("Bio Generation Error:", e);
+    return c.json({ error: 'Failed to generate bio' }, 500);
+  }
+});
+
 export default app;

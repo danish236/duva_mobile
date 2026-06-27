@@ -1,3 +1,7 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 class ComplianceEngine {
   // POCSO & Age Compliance
   static const int minAge = 18;
@@ -6,6 +10,32 @@ class ComplianceEngine {
     final now = DateTime.now();
     final adultDate = DateTime(dob.year + minAge, dob.month, dob.day);
     return now.isAfter(adultDate);
+  }
+
+  // 🛡️ NEW: Centralized AI Text Moderation
+  static Future<bool> isTextClean(String text) async {
+    if (text.trim().isEmpty) return true;
+    
+    // Fallback static regex check (matches your backend) to catch links quickly
+    final spamRegex = RegExp(r'(fuck|shit|bitch|cunt|nigger|onlyfans|only fans|t\.me|telegram|insta|ig:|snapchat|sc:|\@)', caseSensitive: false);
+    if (spamRegex.hasMatch(text)) return false;
+
+    try {
+      final dio = Dio();
+      final apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+      final session = Supabase.instance.client.auth.currentSession;
+      
+      final response = await dio.post(
+        '$apiUrl/moderate-text',
+        data: {'text': text},
+        options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
+      );
+
+      return response.data['isClean'] ?? true;
+    } catch (e) {
+      // If AI backend is unreachable, fail closed — local regex already filters obvious spam
+      return false;
+    }
   }
 
   // Legal Content Registry

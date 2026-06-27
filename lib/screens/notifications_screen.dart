@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
+import '../services/cache_service.dart';
+import '../constants.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -24,18 +26,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _fetchNotifications();
   }
 
-// Replace your _fetchNotifications with this:
 Future<void> _fetchNotifications() async {
   try {
     final session = Supabase.instance.client.auth.currentSession;
     final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
     
-    // Hitting your real backend
-    final response = await dio.get('$apiUrl/notifications', options: options);
+    final data = await CacheService().getOrFetch<List<dynamic>>(
+      'notifications',
+      () async {
+        final response = await dio.get('$apiUrl/notifications', options: options);
+        return List<dynamic>.from(response.data);
+      },
+      ttl: AppConstants.cacheTtlNotifications,
+    );
     
     if (mounted) {
       setState(() {
-        _notifications = List<Map<String, dynamic>>.from(response.data);
+        _notifications = List<Map<String, dynamic>>.from(data);
         _isLoading = false;
       });
     }

@@ -5,6 +5,8 @@ import 'chat_screen.dart';
 import 'notifications_screen.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
+import '../services/cache_service.dart';
+import '../constants.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -28,21 +30,27 @@ class _MatchesScreenState extends State<MatchesScreen> {
     _checkUnreadNotifications(); // Check for likes/matches on load
   }
 
-  // 1. Fetches real notifications (Likes, Matches, System) to control the red dot
   Future<void> _checkUnreadNotifications() async {
     final myId = Supabase.instance.client.auth.currentUser?.id;
     if (myId == null) return;
     
     try {
-      final response = await Supabase.instance.client
-          .from('notifications')
-          .select('id')
-          .eq('user_id', myId)
-          .eq('is_read', false)
-          .limit(1);
+      final result = await CacheService().getOrFetch<bool>(
+        'unread_notifications',
+        () async {
+          final response = await Supabase.instance.client
+              .from('notifications')
+              .select('id')
+              .eq('user_id', myId)
+              .eq('is_read', false)
+              .limit(1);
+          return response is List && response.isNotEmpty;
+        },
+        ttl: AppConstants.cacheTtlUnreadCount,
+      );
 
-      if (mounted && response is List) {
-        setState(() => _hasUnreadNotifications = response.isNotEmpty);
+      if (mounted) {
+        setState(() => _hasUnreadNotifications = result);
       }
     } catch (e) {
       debugPrint("Error checking unread notifications: $e");
@@ -94,9 +102,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
               IconButton(
                 icon: const Icon(Icons.notifications_none, color: Colors.white),
                 onPressed: () async {
-                  // Wait for the user to return from the notifications screen
                   await Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
-                  // Re-check the database to turn off the red dot if they read them
+                  CacheService().remove('unread_notifications');
                   _checkUnreadNotifications(); 
                 },
               ),

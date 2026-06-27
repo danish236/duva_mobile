@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import '../widgets/profile_modal.dart';
+import '../services/cache_service.dart';
+import '../constants.dart';
 
 class AdmirersScreen extends StatefulWidget {
   const AdmirersScreen({super.key});
@@ -31,10 +33,17 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
       final session = Supabase.instance.client.auth.currentSession;
       final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
       
-      // Fetch User's Premium Status
+      // Fetch User's Premium Status (cached)
       final myId = session?.user.id;
-      final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId!).single();
-      _isPremium = profile['is_premium'] ?? false;
+      final cached = await CacheService().getOrFetch<Map<String, dynamic>>(
+        'is_premium',
+        () async {
+          final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', myId!).single();
+          return Map<String, dynamic>.from(profile);
+        },
+        ttl: AppConstants.cacheTtlPremium,
+      );
+      _isPremium = cached['is_premium'] ?? false;
 
       // Fetch Admirers
       final response = await dio.get('$apiUrl/matches', options: options); 
@@ -125,11 +134,14 @@ class _AdmirersScreenState extends State<AdmirersScreen> {
             ),
           ),
         Expanded(
-          // 🔒 FIX: Pull-to-refresh wrapper
+          // 🔒 FIX: Pull-to-refresh wrapper (invalidates cache)
           child: RefreshIndicator(
             color: AppTheme.electricCyan,
             backgroundColor: const Color(0xFF1A1A1A),
-            onRefresh: _fetchData,
+            onRefresh: () async {
+              CacheService().remove('is_premium');
+              await _fetchData();
+            },
             child: GridView.builder(
               // 🔒 FIX: Forces physics active so pull gesture works even with 1 card
               physics: const AlwaysScrollableScrollPhysics(),

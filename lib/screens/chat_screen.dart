@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
 import 'package:flutter/services.dart';
 import '../constants.dart';
+import '../services/cache_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String matchId;
@@ -34,13 +35,26 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _myUserId;
   bool _isLoading = true; 
 
+  String get _messageCacheKey => 'chat_messages_${widget.matchId}';
+
   @override
   void initState() {
     super.initState();
     _myUserId = Supabase.instance.client.auth.currentUser?.id;
     _fetchPremiumStatus();
+    _tryLoadCachedMessages();
     _fetchMessages();
     _pollingTimer = Timer.periodic(AppConstants.chatPollingInterval, (timer) => _fetchMessages(isPolling: true));
+  }
+
+  void _tryLoadCachedMessages() {
+    final cached = CacheService().get(_messageCacheKey);
+    if (cached != null) {
+      setState(() {
+        _messages = List<dynamic>.from(cached);
+        _isLoading = false;
+      });
+    }
   }
 
   // Moved outside of initState
@@ -65,10 +79,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _fetchPremiumStatus() async {
-    if (_myUserId == null) return; 
+    if (_myUserId == null) return;
     try {
-      final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', _myUserId!).single();
-      if (mounted) setState(() => _isPremium = profile['is_premium'] ?? false);
+      final cached = await CacheService().getOrFetch<Map<String, dynamic>>(
+        'is_premium',
+        () async {
+          final profile = await Supabase.instance.client.from('profiles').select('is_premium').eq('id', _myUserId!).single();
+          return Map<String, dynamic>.from(profile);
+        },
+        ttl: AppConstants.cacheTtlPremium,
+      );
+      if (mounted) setState(() => _isPremium = cached['is_premium'] ?? false);
     } catch (e) {
       debugPrint("Failed to load premium status: $e");
     }
@@ -92,14 +113,16 @@ class _ChatScreenState extends State<ChatScreen> {
       final options = await _getSecureOptions();
       final response = await dio.get('$apiUrl/messages/${widget.matchId}', options: options);
       if (mounted) {
+        final messages = List.from(response.data.reversed);
         setState(() {
-          _messages = List.from(response.data.reversed);
-          // Trigger Icebreakers if the chat is completely empty
+          _messages = messages;
           if (_messages.isEmpty && _icebreakers.isEmpty && !_isLoadingIcebreakers) {
             _fetchIcebreakers();
           }
           _isLoading = false; 
         });
+        CacheService().set(_messageCacheKey, messages, ttl: AppConstants.cacheTtlChatMessages);
+        _markMessagesAsRead();
         if (!isPolling && _messages.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
         }
@@ -107,6 +130,21 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) { 
       debugPrint("Polling error: $e"); 
       if (mounted) setState(() => _isLoading = false); 
+    }
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    if (_myUserId == null) return;
+    try {
+      await Supabase.instance.client
+          .from('messages')
+          .update({'is_read': true})
+          .eq('match_id', widget.matchId)
+          .eq('receiver_id', _myUserId!)
+          .eq('is_read', false);
+      CacheService().remove('unread_messages');
+    } catch (e) {
+      debugPrint('Failed to mark messages as read: $e');
     }
   }
 

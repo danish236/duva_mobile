@@ -12,6 +12,8 @@ import 'screens/login_screen.dart';
 
 import 'theme.dart';
 import 'theme_notifier.dart';
+import 'services/cache_service.dart';
+import 'constants.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -22,6 +24,7 @@ void main() async {
     url: dotenv.get('SUPABASE_URL'),
     publishableKey: dotenv.get('SUPABASE_ANON_KEY'),
   );
+  await CacheService().init();
   runApp(const DuvaMobileApp());
 }
 
@@ -82,17 +85,23 @@ class _MainLayoutState extends State<MainLayout> {
     final myId = Supabase.instance.client.auth.currentUser?.id;
     if (myId == null) return;
     
-    // Supabase returns a List<Map<String, dynamic>> directly
-    final List<dynamic> response = await Supabase.instance.client
-        .from('messages')
-        .select('id')
-        .eq('receiver_id', myId)
-        .eq('is_read', false)
-        .limit(1);
+    final hasUnread = await CacheService().getOrFetch<bool>(
+      'unread_messages',
+      () async {
+        final response = await Supabase.instance.client
+            .from('messages')
+            .select('id')
+            .eq('receiver_id', myId)
+            .eq('is_read', false)
+            .limit(1);
+        return response is List && response.isNotEmpty;
+      },
+      ttl: AppConstants.cacheTtlUnreadCount,
+    );
 
     if (mounted) {
       setState(() {
-        _hasUnreadMessages = response.isNotEmpty;
+        _hasUnreadMessages = hasUnread;
       });
     }
   }

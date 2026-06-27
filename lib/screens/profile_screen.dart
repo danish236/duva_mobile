@@ -6,6 +6,8 @@ import 'settings_screen.dart';
 import 'edit_profile_screen.dart'; 
 import '../theme.dart';
 import '../widgets/premium_shimmer.dart';
+import '../services/cache_service.dart';
+import '../constants.dart';
 
 class ProfileData {
   final String id;
@@ -102,7 +104,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw Exception('User is not logged in.');
-      final data = await Supabase.instance.client.from('profiles').select('*, profile_interests (master_interests ( name ))').eq('id', userId).single();
+      final data = await CacheService().getOrFetch<Map<String, dynamic>>(
+        'profile_data',
+        () async {
+          final result = await Supabase.instance.client.from('profiles').select('*, profile_interests (master_interests ( name ))').eq('id', userId).single();
+          return Map<String, dynamic>.from(result);
+        },
+        ttl: AppConstants.cacheTtlProfile,
+      );
       setState(() { _myProfile = ProfileData.fromJson(data); _isLoading = false; });
     } catch (e) {
       setState(() { _errorMessage = "Could not load profile. Have you completed onboarding?"; _isLoading = false; });
@@ -187,7 +196,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: const Icon(Icons.edit_note, color: Colors.white),
             onPressed: () async {
               final didUpdate = await Navigator.push(context, MaterialPageRoute(builder: (context) => EditProfileScreen(currentProfile: profile)));
-              if (didUpdate == true) { setState(() => _isLoading = true); _fetchMyProfile(); }
+              if (didUpdate == true) {
+                CacheService().remove('profile_data');
+                CacheService().remove('is_premium');
+                setState(() => _isLoading = true);
+                _fetchMyProfile();
+              }
             },
           ),
           IconButton(icon: const Icon(Icons.settings, color: Colors.white), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()))),

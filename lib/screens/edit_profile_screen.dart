@@ -9,6 +9,8 @@ import '../services/image_service.dart';
 import '../constants.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../services/compliance_engine.dart';
+import '../services/cache_service.dart';
 
 class ProfilePhotoState {
   dynamic image; // Can be a URL string or a File
@@ -36,6 +38,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _locationController = TextEditingController();
   final _dateBidController = TextEditingController();
   final _weightController = TextEditingController();
+
+  bool _isGeneratingBio = false;
+  List<String> _generatedBios = [];
+  int _bioCooldownDays = 0;
 
   String? _selectedGender;
   String? _selectedExpectation;
@@ -93,13 +99,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _fetchMasterData() async {
+    final cache = CacheService();
     final client = Supabase.instance.client;
     try {
       final results = await Future.wait([
-        client.from('master_genders').select('name').order('id'),
-        client.from('master_expectations').select('name').order('id'),
-        client.from('master_education').select('name').order('id'),
-        client.from('master_interests').select('id, name').order('id'),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_genders',
+          () => client.from('master_genders').select('name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_expectations',
+          () => client.from('master_expectations').select('name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_education',
+          () => client.from('master_education').select('name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
+        cache.getOrFetchPersistent<List<dynamic>>(
+          'master_interests',
+          () => client.from('master_interests').select('id, name').order('id').then((r) => List<dynamic>.from(r as List)),
+          ttl: AppConstants.cacheTtlMasterData,
+        ),
       ]);
 
       if (!mounted) return;
@@ -208,25 +231,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final session = Supabase.instance.client.auth.currentSession;
       
       String? cleanText(String text) => text.trim().isEmpty ? null : text.trim();
+      
       final bioText = cleanText(_bioController.text);
+      final workText = cleanText(_workController.text);
+      final locationText = cleanText(_locationController.text);
+      final dateBidText = cleanText(_dateBidController.text);
 
-      // 🧠 1. CLOUDFLARE AI TEXT MODERATION
-      if (bioText != null) {
-        final dio = Dio();
-        final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+      // 🧠 1. CLOUDFLARE AI TEXT MODERATION (Check ALL text fields)
+      // Combine all text into one string to save API calls
+      final allTextInputs = [bioText, workText, locationText, dateBidText]
+          .where((t) => t != null)
+          .join(" . ");
+
+      if (allTextInputs.isNotEmpty) {
+        final isClean = await ComplianceEngine.isTextClean(allTextInputs);
         
-        final modResponse = await dio.post(
-          '$apiUrl/moderate-text',
-          data: {'text': bioText},
-          options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
-        );
-
-        if (modResponse.data['isClean'] == false) {
+        if (!isClean) {
           if (!mounted) return;
           setState(() => _isSaving = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Your bio contains inappropriate language. Please keep it respectful.'),
+              content: Text('Your profile contains inappropriate language or prohibited handles. Please keep it respectful.'),
               backgroundColor: AppTheme.primaryRose,
               duration: Duration(seconds: 4),
             )
@@ -234,6 +259,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           return; // 🚫 BLOCK THE SAVE OPERATION
         }
       }
+
 
       // 2. PROCESS IMAGES
       List<String> finalImageUrls = [];
@@ -281,7 +307,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         await Supabase.instance.client.from('profile_interests').insert(interestInserts);
       }
 
-      if (!mounted) return; 
+      // 5. CLEAR GENERATED BIOS ON SUCCESSFUL SAVE
+      setState(() => _generatedBios = []);
+
+      if (!mounted) return;
+      CacheService().remove('profile_data');
+      CacheService().remove('is_premium');
       Navigator.pop(context, true);
       
     } catch (e) {
@@ -296,6 +327,74 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     }
   }
+
+  Future<void> _generateBioWithAI() async {
+    if (_isGeneratingBio) return;
+    setState(() {
+      _isGeneratingBio = true;
+      _bioCooldownDays = 0;
+    });
+
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      final session = Supabase.instance.client.auth.currentSession;
+      final dio = Dio();
+      final apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+
+      final profile = widget.currentProfile;
+      final interests = await Supabase.instance.client
+          .from('profile_interests')
+          .select('master_interests(name)')
+          .eq('profile_id', userId);
+      final interestNames = interests
+          .map((e) => e['master_interests']?['name']?.toString() ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList();
+
+      final response = await dio.post(
+        '$apiUrl/generate-bio',
+        data: {
+          'interests': interestNames,
+          'work': profile.work,
+          'education': profile.education,
+          'expectations': profile.expectations,
+          'current_bio': profile.bio,
+        },
+        options: Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}),
+      );
+
+      if (mounted) {
+        setState(() {
+          if (response.data['bios'] != null) {
+            _generatedBios = List<String>.from(response.data['bios']);
+          }
+          _bioCooldownDays = response.data['cooldown_days'] ?? 0;
+        });
+      }
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      if (data != null && data['cooldown_days'] != null && mounted) {
+        setState(() => _bioCooldownDays = data['cooldown_days'] as int);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(data?['error'] ?? 'Failed to generate bio. Try again later.'),
+            backgroundColor: AppTheme.primaryRose,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Bio generation error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Something went wrong.'), backgroundColor: AppTheme.primaryRose),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGeneratingBio = false);
+    }
+  }
+
   void _showSinglePicker(String title, List<String> options, String? currentValue, Function(String) onSelect) {
     showModalBottomSheet(
       context: context,
@@ -500,7 +599,69 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             _buildSectionLabel('ABOUT YOU'),
             _buildTextField(_bioController, 'Bio', 'A little bit about me...', maxLines: 4, maxLength: AppConstants.maxBioLength),
-            
+
+            if (_bioCooldownDays > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Bio generation available in $_bioCooldownDays day(s)',
+                  style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+
+            if (_generatedBios.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.auto_awesome, color: AppTheme.electricCyan, size: 14),
+                  SizedBox(width: 6),
+                  Text('AI SUGGESTIONS', style: TextStyle(color: AppTheme.electricCyan, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ..._generatedBios.map((bio) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    _bioController.text = bio;
+                    setState(() => _generatedBios = []);
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.electricCyan.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.electricCyan.withValues(alpha: 0.25)),
+                    ),
+                    child: Text(bio, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4)),
+                  ),
+                ),
+              )),
+            ],
+
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isGeneratingBio || _bioCooldownDays > 0 ? null : _generateBioWithAI,
+                icon: _isGeneratingBio
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppTheme.electricCyan, strokeWidth: 2))
+                    : const Icon(Icons.auto_awesome, size: 18),
+                label: Text(
+                  _isGeneratingBio ? 'Generating...' : 'Generate Bio with AI',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.electricCyan,
+                  side: const BorderSide(color: AppTheme.electricCyan, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 48),
             SizedBox(
               width: double.infinity, height: 60,

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme.dart';
 import '../constants.dart';
+import '../services/cache_service.dart';
 
 class PreferencesScreen extends StatefulWidget {
   const PreferencesScreen({super.key});
@@ -35,9 +36,18 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
 
   Future<void> _fetchMasterData() async {
     try {
+      final cache = CacheService();
       final supabase = Supabase.instance.client;
-      final interests = await supabase.from('master_interests').select();
-      final genders = await supabase.from('master_genders').select();
+      final interests = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_interests',
+        () => supabase.from('master_interests').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
+      final genders = await cache.getOrFetchPersistent<List<dynamic>>(
+        'master_genders',
+        () => supabase.from('master_genders').select().then((r) => List<dynamic>.from(r as List)),
+        ttl: AppConstants.cacheTtlMasterData,
+      );
       
       if (mounted) {
         setState(() {

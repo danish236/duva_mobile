@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../theme_notifier.dart'; 
 import '../theme.dart';
 import 'info_screen.dart';
+import '../services/cache_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,6 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isProcessing = false;
 
   Future<void> _signOut() async {
+    CacheService().clearAll();
     await Supabase.instance.client.auth.signOut();
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
@@ -71,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final session = Supabase.instance.client.auth.currentSession;
       final options = Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'});
       await dio.delete('$apiUrl/account', options: options);
+      CacheService().clearAll();
       await Supabase.instance.client.auth.signOut();
       
       if (!mounted) return;
