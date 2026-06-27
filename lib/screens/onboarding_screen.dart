@@ -8,6 +8,8 @@ import 'package:geocoding/geocoding.dart';
 import '../main.dart'; 
 import '../theme.dart';
 import '../constants.dart';
+import 'package:dio/dio.dart' as dio_pkg;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -109,6 +111,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  Future<dio_pkg.Options> _getSecureOptions() async { // ✅ Added dio_pkg. prefix
+    try { await Supabase.instance.client.auth.refreshSession(); } catch (_) {}
+    final session = Supabase.instance.client.auth.currentSession;
+    return dio_pkg.Options(headers: {'Authorization': 'Bearer ${session?.accessToken}'}); // ✅ Added dio_pkg. prefix
+  }
+
   Future<void> _completeOnboarding() async {
     if (_images.isEmpty) { 
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload at least one image'))); 
@@ -119,76 +127,78 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return; 
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     
     try {
       final user = Supabase.instance.client.auth.currentUser!;
+      final dioClient = dio_pkg.Dio();
+      final String apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
+
+      // 1. Upload images (Using Cloudflare NSFW filter)
       List<String> imageUrls = [];
       for (int i = 0; i < _images.length; i++) {
         final file = _images[i];
-        final fileExt = file.path.split('.').last;
-        final fileName = '${user.id}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
-        await Supabase.instance.client.storage.from('avatars').upload(fileName, file);
-        imageUrls.add(Supabase.instance.client.storage.from('avatars').getPublicUrl(fileName));
+        final fileName = '${user.id}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        
+        final options = await _getSecureOptions();
+        final formData = dio_pkg.FormData.fromMap({
+          'image': await dio_pkg.MultipartFile.fromFile(file.path, filename: fileName),
+        });
+
+        final uploadRes = await dioClient.post('$apiUrl/upload', data: formData, options: options);
+        if (uploadRes.data['url'] != null) {
+          imageUrls.add(uploadRes.data['url']);
+        }
       }
 
+      // 2. RESTORED: Geolocation Logic
       String city = "Unknown Location";
-      double lat = 0.0, lng = 0.0;
       try {
         if (await Geolocator.isLocationServiceEnabled()) {
           LocationPermission p = await Geolocator.checkPermission();
-          if (p == LocationPermission.denied) {
-            p = await Geolocator.requestPermission();
-          }
+          if (p == LocationPermission.denied) p = await Geolocator.requestPermission();
           if (p == LocationPermission.whileInUse || p == LocationPermission.always) {
             Position pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
-            lat = pos.latitude; 
-            lng = pos.longitude;
             List<Placemark> marks = await placemarkFromCoordinates(pos.latitude, pos.longitude);
-            if (marks.isNotEmpty) {
-              city = "${marks.first.locality}, ${marks.first.country}";
-            }
+            if (marks.isNotEmpty) city = "${marks.first.locality}, ${marks.first.country}";
           }
         }
       } catch (_) {}
 
-      final String? selectedGenderName = _selectedGenderId != null ? _masterGenders.firstWhere((g) => g['id'] == _selectedGenderId)['name'] : null;
-      final String? selectedEducationName = _selectedEducationId != null ? _masterEducation.firstWhere((e) => e['id'] == _selectedEducationId)['name'] : null;
-      final String? selectedExpectationName = _selectedExpectationId != null ? _masterExpectations.firstWhere((e) => e['id'] == _selectedExpectationId)['name'] : null;
+      // 3. Resolve master data names
+      final String? selectedGenderName = _selectedGenderId != null 
+          ? _masterGenders.firstWhere((g) => g['id'] == _selectedGenderId, orElse: () => {'name': null})['name'] 
+          : null;
+      final String? selectedExpectationName = _selectedExpectationId != null 
+          ? _masterExpectations.firstWhere((e) => e['id'] == _selectedExpectationId, orElse: () => {'name': null})['name'] 
+          : null;
 
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': user.id,
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'bio': _bioController.text.trim(),
-        'work': _workController.text.trim(),
-        'dob': _selectedDate!.toIso8601String(),
-        'gender': selectedGenderName, 
-        'education': selectedEducationName,
-        'expectations': selectedExpectationName,
-        'location': city,
-        'latitude': lat,
-        'longitude': lng,
-        'images': imageUrls,
-        'height': _selectedHeight,
-        'weight': _weightController.text.trim(),
-        'smoking': _selectedSmoking,
-        'drinking': _selectedDrinking,
-        'workout': _selectedWorkout,
-        'pets': _selectedPets,
-        'zodiac': _selectedZodiac,
-        'kids': _selectedKids,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
+      // 4. Send profile to Gatekeeper
+      final options = await _getSecureOptions();
+      final response = await dioClient.post(
+        '$apiUrl/profile',
+        data: {
+          'firstName': _firstNameController.text.trim(), 
+          'lastName': _lastNameController.text.trim(),
+          'bio': _bioController.text.trim(),
+          'dob': "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}",
+          'gender': selectedGenderName,
+          'lookingFor': null, // Update this if you add a lookingFor controller
+          'images': imageUrls,
+          'expectations': selectedExpectationName,
+        },
+        options: options,
+      );
 
+      if (response.statusCode != 200) throw Exception('Server rejected profile data');
+
+      // 5. Save interests
       final uniqueInterests = _selectedInterestIds.toSet().toList();
       await Supabase.instance.client.from('profile_interests').delete().eq('profile_id', user.id);
-      
       if (uniqueInterests.isNotEmpty) {
-        List<Map<String, dynamic>> interestInserts = uniqueInterests.map((id) => {'profile_id': user.id, 'interest_id': id}).toList();
-        await Supabase.instance.client.from('profile_interests').insert(interestInserts);
+        await Supabase.instance.client.from('profile_interests').insert(
+          uniqueInterests.map((id) => {'profile_id': user.id, 'interest_id': id}).toList()
+        );
       }
 
       if (mounted) {
@@ -196,14 +206,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error saving profile. Try again.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving profile: ${e.toString()}')));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

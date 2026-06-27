@@ -557,4 +557,58 @@ app.post('/rewind', async (c) => {
   }
 });
 
+// --- 11. THE PROFILE GATEKEEPER ---
+app.post('/profile', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { firstName, lastName, bio, dob, gender, lookingFor, images, expectations } = await c.req.json();
+
+    // 1. 🛡️ PROFANITY & SPAM SANITIZER
+    // Blocks slurs, solicitation, and external handles (Insta, Telegram, OnlyFans, Snap)
+    const spamRegex = /(fuck|shit|bitch|cunt|nigger|onlyfans|only fans|t\.me|telegram|insta|ig:|snapchat|sc:|\@)/i;
+    if (spamRegex.test(bio || '') || spamRegex.test(firstName || '')) {
+      return c.json({ error: 'Profile text contains prohibited language or social handles.' }, 400);
+    }
+
+    // 2. 🛡️ THE IMAGE DOMAIN LOCK (The ultimate hack-killer)
+    // Forces 100% of image URLs to belong to YOUR Cloudflare R2 bucket. 
+    const validImages = (images || []).filter((url: string) => {
+      return typeof url === 'string' && url.startsWith(c.env.R2_PUBLIC_URL);
+    });
+
+    if (validImages.length === 0) {
+      return c.json({ error: 'You must provide at least 1 valid Duva photograph.' }, 400);
+    }
+
+    // 3. 🛡️ SERVER-SIDE AGE ENFORCEMENT (Prevents dob tampering)
+    const birthDate = new Date(dob);
+    const age = Math.floor((Date.now() - birthDate.getTime()) / 31557600000);
+    if (age < 18 || age > 99) {
+      return c.json({ error: 'You must be 18+ to use Duva.' }, 403);
+    }
+
+    // 4. Safe to commit to DB
+    const { error } = await supabase.from('profiles').upsert({
+      id: user.id,
+      first_name: String(firstName).trim().substring(0, 30),
+      last_name: lastName ? String(lastName).trim().substring(0, 30) : null,
+      bio: bio ? String(bio).trim().substring(0, 300) : '',
+      dob: dob,
+      gender: gender,
+      looking_for_gender: lookingFor,
+      images: validImages, // Only accepts the locked-down R2 urls
+      expectations: expectations
+    });
+
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (e) {
+    console.error("Profile Gatekeeper Failed:", e);
+    return c.json({ error: 'Failed to commit profile' }, 500);
+  }
+});
+
 export default app;
