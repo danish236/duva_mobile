@@ -17,7 +17,11 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
-  bool _acceptedTerms = false;
+  bool _consentAge = false;
+  bool _consentTerms = false;
+  bool _consentPrivacy = false;
+  bool _consentGuidelines = false;
+  bool _consentDataProcessing = false;
   int _passwordStrength = 0; 
 
   late AnimationController _btnController;
@@ -68,22 +72,74 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     return Messages.passwordStrengthHint;
   }
 
+  List<Widget> _buildConsentCheckbox({
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    required TextSpan text,
+  }) {
+    return [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 24, width: 24,
+            child: Checkbox(
+              value: value,
+              onChanged: onChanged,
+              activeColor: AppTheme.electricCyan,
+              checkColor: Colors.black,
+              side: const BorderSide(color: Colors.white38),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8), fontSize: 12, height: 1.5),
+                children: [text],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  Future<void> _saveConsent() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      await Supabase.instance.client.from('user_consents').upsert({
+        'user_id': user.id,
+        'age_consent': true,
+        'terms_accepted': true,
+        'privacy_accepted': true,
+        'guidelines_accepted': true,
+        'data_processing_accepted': true,
+        'terms_accepted_at': DateTime.now().toUtc().toIso8601String(),
+        'privacy_accepted_at': DateTime.now().toUtc().toIso8601String(),
+        'guidelines_accepted_at': DateTime.now().toUtc().toIso8601String(),
+        'data_processing_accepted_at': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (_) {}
+  }
+
   Future<void> _signUp() async {
     if (_passwordStrength < 3) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.weakPassword)));
       return;
     }
 
-    if (!_acceptedTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.mustAcceptTerms)));
+    if (!(_consentAge && _consentTerms && _consentPrivacy && _consentGuidelines && _consentDataProcessing)) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.mustAcceptAll)));
       return;
     }
 
     setState(() => _isLoading = true);
     try {
       await Supabase.instance.client.auth.signUp(email: _emailController.text.trim(), password: _passwordController.text.trim());
+      await _saveConsent();
       if (!mounted) return;
-      // Smooth fade into onboarding
       Navigator.pushReplacement(context, PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => const OnboardingScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) => FadeTransition(opacity: animation, child: child),
@@ -169,44 +225,65 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
 
               const SizedBox(height: 24),
 
-              // Terms Acceptance
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 24, width: 24,
-                    child: Checkbox(
-                      value: _acceptedTerms,
-                      onChanged: (val) => setState(() => _acceptedTerms = val ?? false),
-                      activeColor: AppTheme.electricCyan,
-                      checkColor: Colors.black,
-                      side: const BorderSide(color: Colors.white38),
+              // Multi-checkbox Consent Form
+              ..._buildConsentCheckbox(
+                value: _consentAge,
+                onChanged: (v) => setState(() => _consentAge = v),
+                text: TextSpan(text: Messages.consentAgeCheck),
+              ),
+              const SizedBox(height: 8),
+              ..._buildConsentCheckbox(
+                value: _consentTerms,
+                onChanged: (v) => setState(() => _consentTerms = v),
+                text: TextSpan(
+                  children: [
+                    TextSpan(text: Messages.consentTerms),
+                    TextSpan(
+                      text: Messages.termsLink,
+                      style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'terms'))),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8), fontSize: 12, height: 1.5),
-                        children: [
-                          TextSpan(text: Messages.agreeToTerms),
-                          TextSpan(
-                            text: Messages.termsLink,
-                            style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
-                            recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'terms'))),
-                          ),
-                          TextSpan(text: Messages.andPrivacy),
-                          TextSpan(
-                            text: Messages.privacyLink,
-                            style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
-                            recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'privacy'))),
-                          ),
-                          const TextSpan(text: '.'),
-                        ],
-                      ),
+                    const TextSpan(text: '.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              ..._buildConsentCheckbox(
+                value: _consentPrivacy,
+                onChanged: (v) => setState(() => _consentPrivacy = v),
+                text: TextSpan(
+                  children: [
+                    TextSpan(text: Messages.consentPrivacy),
+                    TextSpan(
+                      text: Messages.privacyLink,
+                      style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'privacy'))),
                     ),
-                  ),
-                ],
+                    const TextSpan(text: '.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              ..._buildConsentCheckbox(
+                value: _consentGuidelines,
+                onChanged: (v) => setState(() => _consentGuidelines = v),
+                text: TextSpan(
+                  children: [
+                    TextSpan(text: Messages.consentGuidelines),
+                    TextSpan(
+                      text: Messages.guidelinesLink,
+                      style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'guidelines'))),
+                    ),
+                    const TextSpan(text: '.'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              ..._buildConsentCheckbox(
+                value: _consentDataProcessing,
+                onChanged: (v) => setState(() => _consentDataProcessing = v),
+                text: TextSpan(text: Messages.consentDataProcessing),
               ),
 
               const SizedBox(height: 36),

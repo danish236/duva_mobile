@@ -27,11 +27,15 @@ class Messages {
   static const String registerButton = 'CREATE ACCOUNT';
   static const String signUpPrompt = 'NEW HERE? INITIALIZE PROFILE';
   static const String signOut = 'Sign Out';
-  static const String agreeToTerms = 'I have read and agree to the ';
+  static const String consentAgeCheck = 'I confirm that I am at least 18 (eighteen) years of age.';
+  static const String consentTerms = 'I have read and agree to the ';
   static const String termsLink = 'Terms of Service';
-  static const String andPrivacy = ' and ';
+  static const String consentPrivacy = 'I have read and agree to the ';
   static const String privacyLink = 'Privacy Policy';
-  static const String mustAcceptTerms = 'You must accept the Terms of Service and Privacy Policy to create an account.';
+  static const String consentGuidelines = 'I agree to the ';
+  static const String guidelinesLink = 'Community Guidelines';
+  static const String consentDataProcessing = 'I consent to the collection, storage, and processing of my personal data as described in the Privacy Policy.';
+  static const String mustAcceptAll = 'Please accept all consent requirements to create an account.';
 
   // ─── ONBOARDING ────────────────────────────────────────────
   static const String pleaseUploadImage = 'Please upload at least one image';
@@ -222,8 +226,8 @@ class Messages {
   static const String privacyPolicy = 'Privacy Policy';
   static const String termsOfService = 'Terms of Service';
   static const String safetyGuidelines = 'Safety Guidelines';
+  static const String cookiePolicy = 'Cookie Policy';
   static const String privacyAndSecurity = 'Privacy & Security';
-  static const String dataSection = 'DATA';
   static const String requestDataExport = 'Request Data Export';
   static const String exportLinkSent = 'Export link sent to email.';
   static const String dangerZone = 'DANGER ZONE';

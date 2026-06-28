@@ -614,6 +614,34 @@ app.post('/preferences', async (c) => {
 });
 
 // --- 9. ACCOUNT MANAGEMENT ---
+app.post('/consent', async (c) => {
+  try {
+    const supabase = getSupabaseClient(c);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+    const { age_consent, terms_accepted, privacy_accepted, guidelines_accepted, data_processing_accepted } = await c.req.json();
+
+    await supabase.from('user_consents').upsert({
+      user_id: user.id,
+      age_consent: age_consent || false,
+      terms_accepted: terms_accepted || false,
+      privacy_accepted: privacy_accepted || false,
+      guidelines_accepted: guidelines_accepted || false,
+      data_processing_accepted: data_processing_accepted || false,
+      terms_accepted_at: terms_accepted ? new Date().toISOString() : null,
+      privacy_accepted_at: privacy_accepted ? new Date().toISOString() : null,
+      guidelines_accepted_at: guidelines_accepted ? new Date().toISOString() : null,
+      data_processing_accepted_at: data_processing_accepted ? new Date().toISOString() : null,
+    }, { onConflict: 'user_id' });
+
+    return c.json({ success: true });
+  } catch (e) {
+    console.error('Consent API Error:', e);
+    return c.json({ error: 'Failed to save consent' }, 500);
+  }
+});
+
 app.delete('/account', async (c) => {
   try {
     const supabase = getSupabaseClient(c);
@@ -626,9 +654,41 @@ app.delete('/account', async (c) => {
     }
 
     const adminSupabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { error } = await adminSupabase.auth.admin.deleteUser(user.id);
 
+    // 1. Fetch profile to get image URLs
+    const { data: profile } = await supabase.from('profiles').select('images').eq('id', user.id).maybeSingle();
+
+    // 2. Delete images from R2
+    if (profile?.images) {
+      const r2Base = c.env.R2_PUBLIC_URL + '/';
+      for (const url of profile.images) {
+        if (typeof url === 'string' && url.startsWith(r2Base)) {
+          const key = url.slice(r2Base.length);
+          await c.env.duva_images.delete(key);
+        }
+      }
+    }
+
+    const userId = user.id;
+
+    // 3. Delete related records
+    await supabase.from('profile_interests').delete().eq('profile_id', userId);
+    await supabase.from('notifications').delete().eq('user_id', userId);
+    await supabase.from('swipes').delete().or(`swiper_id.eq.${userId},swiped_id.eq.${userId}`);
+    await supabase.from('user_consents').delete().eq('user_id', userId);
+
+    // 4. Keep messages, blocks, and reports with original UUIDs intact
+    //    (profile personal data is deleted below; UUIDs stay for incident tracing,
+    //     IT Act record retention, and other users' safety. The UUID no longer
+    //     resolves to a live user, so it's effectively anonymized as PII.)
+
+    // 5. Delete profile
+    await supabase.from('profiles').delete().eq('id', userId);
+
+    // 7. Delete auth user
+    const { error } = await adminSupabase.auth.admin.deleteUser(userId);
     if (error) throw error;
+
     return c.json({ success: true, message: 'Account wiped successfully' });
   } catch (e) {
     console.error(e);
