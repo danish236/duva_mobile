@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_screen.dart';
+import 'info_screen.dart';
 import '../theme.dart';
 import '../messages.dart';
 
@@ -15,6 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  bool _acceptedTerms = false;
   int _passwordStrength = 0; 
 
   late AnimationController _btnController;
@@ -68,6 +71,11 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   Future<void> _signUp() async {
     if (_passwordStrength < 3) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.weakPassword)));
+      return;
+    }
+
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Messages.mustAcceptTerms)));
       return;
     }
 
@@ -158,9 +166,51 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
               ),
               const SizedBox(height: 12),
               Text(_getStrengthText(), style: TextStyle(color: _passwordStrength == 0 ? AppTheme.textSecondary.withValues(alpha: 0.6) : _getStrengthColor(), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-              
-              const SizedBox(height: 60),
-              
+
+              const SizedBox(height: 24),
+
+              // Terms Acceptance
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 24, width: 24,
+                    child: Checkbox(
+                      value: _acceptedTerms,
+                      onChanged: (val) => setState(() => _acceptedTerms = val ?? false),
+                      activeColor: AppTheme.electricCyan,
+                      checkColor: Colors.black,
+                      side: const BorderSide(color: Colors.white38),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8), fontSize: 12, height: 1.5),
+                        children: [
+                          TextSpan(text: Messages.agreeToTerms),
+                          TextSpan(
+                            text: Messages.termsLink,
+                            style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                            recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'terms'))),
+                          ),
+                          TextSpan(text: Messages.andPrivacy),
+                          TextSpan(
+                            text: Messages.privacyLink,
+                            style: const TextStyle(color: AppTheme.electricCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                            recognizer: TapGestureRecognizer()..onTap = () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(docType: 'privacy'))),
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 36),
+
               // Tactile Animated Register Button
               GestureDetector(
                 onTapDown: (_) => _btnController.forward(),

@@ -27,6 +27,11 @@ class Messages {
   static const String registerButton = 'CREATE ACCOUNT';
   static const String signUpPrompt = 'NEW HERE? INITIALIZE PROFILE';
   static const String signOut = 'Sign Out';
+  static const String agreeToTerms = 'I have read and agree to the ';
+  static const String termsLink = 'Terms of Service';
+  static const String andPrivacy = ' and ';
+  static const String privacyLink = 'Privacy Policy';
+  static const String mustAcceptTerms = 'You must accept the Terms of Service and Privacy Policy to create an account.';
 
   // ─── ONBOARDING ────────────────────────────────────────────
   static const String pleaseUploadImage = 'Please upload at least one image';
