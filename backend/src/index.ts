@@ -124,19 +124,62 @@ app.post('/upload', async (c) => {
     }
 
     const ai = c.env.AI;
-    const aiResponse = await ai.run('@cf/meta/llama-3.2-11b-vision-instruct', {
-      prompt: "Does this image contain explicit pornographic content, visible genitals, or a sexual act? Answer STRICTLY with 'YES' or 'NO' only.",
-      image: [...uint8Array]
-    });
 
-    const rawResponse = aiResponse.response as string;
-    console.log("NSFW AI RAW RESPONSE:", rawResponse);
+    // FAIL-CLOSED: If AI binding is missing, reject upload
+    if (!ai) {
+      console.error("NSFW: AI binding (c.env.AI) is UNDEFINED — rejecting upload for safety");
+      return c.json({ error: 'Safety check unavailable. Please try again later.' }, 503);
+    }
 
-    const answer = rawResponse.toUpperCase().trim();
+    let aiRawResponse = '';
+    let visionOk = false;
 
-    if (answer === 'YES' || answer.startsWith('YES')) {
-        console.log("NSFW FLAGGED - AI said:", rawResponse);
-        return c.json({ error: 'NSFW Content Detected. Image rejected by Safety Engine.', ai_raw: rawResponse }, 403);
+    // Primary: LLaMA vision model
+    try {
+      const visionResponse = await ai.run('@cf/meta/llama-3.2-11b-vision-instruct', {
+        prompt: "You are a content safety classifier. Analyze this image and answer ONLY with YES or NO. Does it contain: visible genitals, nudity, a sexual act, pornographic content, or any sexually explicit material? Answer:",
+        image: [...uint8Array]
+      });
+      aiRawResponse = (visionResponse.response as string) || '';
+      visionOk = true;
+      console.log("NSFW AI RAW:", aiRawResponse);
+    } catch (visionErr) {
+      console.error("NSFW: LLaMA vision model failed:", visionErr);
+    }
+
+    // Fallback: ResNet-50 classification if vision failed
+    if (!visionOk) {
+      try {
+        const classResponse = await ai.run('@cf/microsoft/resnet-50', { image: [...uint8Array] });
+        aiRawResponse = JSON.stringify(classResponse);
+        console.log("NSFW fallback classification:", aiRawResponse);
+        visionOk = true;
+      } catch (classErr) {
+        console.error("NSFW: Classification fallback also failed:", classErr);
+      }
+    }
+
+    // FAIL-CLOSED: If all AI checks failed, reject for safety
+    if (!visionOk) {
+      console.error("NSFW: All AI checks failed — rejecting upload for safety");
+      return c.json({ error: 'Safety check failed. Please try again.' }, 503);
+    }
+
+    // NSFW pattern detection
+    const ans = (aiRawResponse || '').toUpperCase().trim();
+    const nsfwPatterns = [
+      'YES', 'YES.', '"YES"', "'YES'",
+      'EXPLICIT', 'PORNOGRAPHY', 'GENITALS', 'SEXUAL', 'NUDITY',
+      'INAPPROPRIATE', 'ADULT CONTENT', 'NSFW',
+      'I CANNOT', 'I\'M SORRY', 'I AM SORRY', 'CANNOT PROVIDE',
+      'VIOLATES', 'CONTENT POLICY', 'RESTRICTED',
+      'NOT APPROPRIATE', 'UNSAFE',
+    ];
+    const isNsfw = nsfwPatterns.some(p => ans.includes(p));
+
+    if (isNsfw) {
+      console.log("NSFW DETECTED — rejecting image:", aiRawResponse);
+      return c.json({ error: 'NSFW Content Detected. Image rejected by Safety Engine.', ai_raw: aiRawResponse }, 403);
     }
 
     const rand = new Uint8Array(8);
@@ -148,7 +191,7 @@ app.post('/upload', async (c) => {
     });
 
     const publicUrl = `${c.env.R2_PUBLIC_URL}/${fileName}`;
-    return c.json({ url: publicUrl, success: true });
+    return c.json({ url: publicUrl, success: true, ai_checked: true, ai_raw: aiRawResponse || 'no response (fallback path)' });
   } catch (e) {
     console.error("UPLOAD CRASH:", e);
     return c.json({ error: 'Upload failed. Please try again.' }, 500);
@@ -923,7 +966,7 @@ app.post('/generate-bio', async (c) => {
     }
 
     const ai = c.env.AI;
-    const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+    const aiResponse = await ai.run('@cf/meta/llama-3.1-8b-instruct-fast', {
       messages: [
         {
           role: "system",
@@ -936,10 +979,30 @@ app.post('/generate-bio', async (c) => {
       ]
     });
 
-    const rawAiResponse = aiResponse.response as string;
-    console.log("BIO-GEN AI RAW RESPONSE:", rawAiResponse);
+    console.log("BIO-GEN FULL RESPONSE:", JSON.stringify(aiResponse));
 
-    let rawText = rawAiResponse.trim();
+    let rawAiResponse: string;
+    try {
+      if (typeof aiResponse === 'string') {
+        rawAiResponse = aiResponse;
+      } else if (typeof aiResponse?.response === 'string') {
+        rawAiResponse = aiResponse.response;
+      } else if (aiResponse?.response && typeof aiResponse.response === 'object') {
+        rawAiResponse = JSON.stringify(aiResponse.response);
+      } else if (aiResponse?.result && typeof aiResponse.result === 'object') {
+        rawAiResponse = JSON.stringify(aiResponse.result);
+      } else if (aiResponse?.result?.response) {
+        rawAiResponse = String(aiResponse.result.response);
+      } else {
+        rawAiResponse = JSON.stringify(aiResponse);
+      }
+    } catch (parseResponseErr) {
+      console.error("BIO-GEN response parse error:", parseResponseErr);
+      rawAiResponse = String(aiResponse);
+    }
+    console.log("BIO-GEN PARSED RAW:", rawAiResponse);
+
+    let rawText = (rawAiResponse || '').trim();
     if (rawText.startsWith('```json')) rawText = rawText.replace(/```json/g, '');
     if (rawText.startsWith('```')) rawText = rawText.replace(/```/g, '');
     rawText = rawText.trim();
@@ -948,6 +1011,7 @@ app.post('/generate-bio', async (c) => {
     try {
       bios = JSON.parse(rawText);
       if (!Array.isArray(bios) || bios.length === 0) throw new Error('Invalid format');
+      bios = bios.map((b: string) => String(b).substring(0, 280));
     } catch (parseErr) {
       console.error("BIO-GEN PARSE ERROR:", parseErr, "RAW:", rawAiResponse);
       throw new Error('AI returned invalid format');

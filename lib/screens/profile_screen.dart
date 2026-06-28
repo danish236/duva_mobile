@@ -94,11 +94,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ProfileData? _myProfile;
   bool _isLoading = true;
   String? _errorMessage;
+  int _currentImageIndex = 0;
+  final PageController _pageController = PageController();
 
   @override
   void initState() {
     super.initState();
     _fetchMyProfile();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchMyProfile() async {
@@ -109,10 +117,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'profile_data',
         () async {
           final result = await Supabase.instance.client.from('profiles').select('*, profile_interests (master_interests ( name ))').eq('id', userId).single();
+          debugPrint("FETCH: Raw images from Supabase: ${result['images']} (type: ${result['images'].runtimeType})");
           return Map<String, dynamic>.from(result);
         },
         ttl: AppConstants.cacheTtlProfile,
       );
+      debugPrint("FETCH: Parsed images: ${data['images']} (type: ${data['images'].runtimeType})");
       setState(() { _myProfile = ProfileData.fromJson(data); _isLoading = false; });
     } catch (e) {
       setState(() { _errorMessage = Messages.couldNotLoadProfile; _isLoading = false; });
@@ -187,6 +197,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
+    debugPrint("BUILD: images count = ${_myProfile!.images.length}, isEmpty = ${_myProfile!.images.isEmpty}, first = ${_myProfile!.images.isNotEmpty ? _myProfile!.images[0].substring(0, 50) : 'N/A'}");
+    
     final profile = _myProfile!;
     
     // Hardened logic to prevent empty boxes or null text
@@ -243,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (profile.images.isNotEmpty) _buildFullWidthImage(profile.images[0]),
+              if (profile.images.isNotEmpty) _buildImageCarousel(profile.images),
 
               _buildPunchyInfoCard(
                 child: Column(
@@ -330,7 +342,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
 
             if (_isValid(profile.bio)) _buildPunchyPromptCard(Messages.aboutMe, profile.bio!),
-            if (profile.images.length > 1) _buildFullWidthImage(profile.images[1]),
             if (_isValid(profile.expectations)) _buildPunchyPromptCard(Messages.lookingFor, profile.expectations!),
             
             if (profile.interests.isNotEmpty)
@@ -357,7 +368,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
 
-            if (profile.images.length > 2) _buildFullWidthImage(profile.images[2]),
             const SizedBox(height: 120),
           ],
         ),
@@ -421,20 +431,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildFullWidthImage(String imageUrl) {
+  Widget _buildImageCarousel(List<String> images) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32), // Deep, continuous curve
+        borderRadius: BorderRadius.circular(32),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, 10))]
       ),
       clipBehavior: Clip.antiAlias,
-      child: Image.network(
-        imageUrl, height: 450, fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return const SizedBox(height: 450, child: Center(child: CircularProgressIndicator(color: AppTheme.electricCyan)));
-        },
+      child: Column(
+        children: [
+          SizedBox(
+            height: 450,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: 100000,
+              onPageChanged: (index) => setState(() => _currentImageIndex = index),
+              itemBuilder: (context, index) {
+                final i = index % images.length;
+                return Image.network(
+                  images[i],
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(child: CircularProgressIndicator(color: AppTheme.electricCyan));
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return SizedBox(
+                      height: 450,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.broken_image, color: Colors.white38, size: 48),
+                            const SizedBox(height: 8),
+                            Text('Failed to load', style: TextStyle(color: Colors.white38)),
+                            Text(images[i].length > 50 ? '${images[i].substring(0, 50)}...' : images[i], style: TextStyle(color: Colors.white24, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          if (images.length > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(images.length, (index) {
+                  return Container(
+                    width: 8, height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: index == _currentImageIndex % images.length ? AppTheme.electricCyan : Colors.white38,
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
       ),
     );
   }

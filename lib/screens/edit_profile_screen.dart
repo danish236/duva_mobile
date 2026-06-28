@@ -323,11 +323,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (finalImageUrls.isEmpty) throw Exception(Messages.noValidImagesToSave);
 
+      debugPrint("SAVE: Sending images: ${finalImageUrls}");
+      debugPrint("SAVE: Image count: ${finalImageUrls.length}");
+
       // 3. UPDATE PROFILE VIA BACKEND GATEKEEPER
       final dio = Dio();
       final apiUrl = dotenv.env['BACKEND_URL'] ?? 'https://backend.duvamobile.workers.dev';
       final profile = widget.currentProfile;
-      await dio.post(
+      final saveResp = await dio.post(
         '$apiUrl/profile',
         data: {
           'firstName': profile.firstName,
@@ -369,13 +372,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // 5. CLEAR GENERATED BIOS ON SUCCESSFUL SAVE
       setState(() => _generatedBios = []);
 
+      debugPrint("SAVE: Backend response: ${saveResp.statusCode} ${saveResp.data}");
+
       if (!mounted) return;
       CacheService().remove('profile_data');
       CacheService().remove('is_premium');
       Navigator.pop(context, true);
       
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("SAVE: CATCH Error: $e");
       if (!mounted) return;
       ErrorHandler.showError(context, Messages.somethingWentWrong);
     } finally {

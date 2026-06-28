@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
@@ -57,6 +58,7 @@ class ImageService {
       );
 
       if (response.statusCode == 200 && response.data['url'] != null) {
+        debugPrint("UPLOAD: ai_checked=${response.data['ai_checked']}, ai_raw=${response.data['ai_raw']}");
         return response.data['url'] as String;
       }
 
